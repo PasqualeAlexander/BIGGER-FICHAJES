@@ -1,0 +1,28 @@
+{
+  "name": "bot-fichajes-discord",
+  "version": "1.0.0",
+  "description": "Bot de Discord para gestionar fichajes de jugadores con sistema de aprobación por administradores",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "fichajes",
+    "gaming",
+    "discord.js"
+  ],
+  "author": "Tu nombre aquí",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.9.0"
+  }
+}
