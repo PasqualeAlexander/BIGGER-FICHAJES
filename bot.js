@@ -30,24 +30,51 @@ async function registerCommands() {
                 option.setName('jugador')
                     .setDescription('El jugador al que quieres enviar la solicitud de fichaje')
                     .setRequired(true)
+            ),
+        new SlashCommandBuilder()
+            .setName('bajar')
+            .setDescription('Notificar que un jugador fue bajado del equipo')
+            .addUserOption(option =>
+                option.setName('jugador')
+                    .setDescription('El jugador que fue bajado')
+                    .setRequired(true)
+            )
+            .addStringOption(option =>
+                option.setName('motivo')
+                    .setDescription('Motivo de la baja (opcional)')
+                    .setRequired(false)
             )
     ];
 
     try {
-        console.log('🔄 Registrando comandos slash...');
+        console.log('🔄 Limpiando comandos existentes...');
+        await client.application.commands.set([]);
+        
+        console.log('🔄 Registrando comandos globalmente...');
         await client.application.commands.set(commands);
+        
+        // También registrar para cada servidor donde está el bot
+        console.log('🔄 Registrando comandos en servidores...');
+        for (const guild of client.guilds.cache.values()) {
+            await guild.commands.set(commands);
+            console.log(`✅ Comandos registrados en ${guild.name}`);
+        }
+        
         console.log('✅ Comandos registrados exitosamente');
+        console.log('📋 Comandos disponibles:', commands.map(cmd => cmd.name).join(', '));
     } catch (error) {
         console.error('❌ Error al registrar comandos:', error);
     }
 }
 
-// Manejo del comando /fichar
+// Manejo de comandos slash
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'fichar') {
         await handleFicharCommand(interaction);
+    } else if (interaction.commandName === 'bajar') {
+        await handleBajarCommand(interaction);
     }
 });
 
@@ -67,6 +94,15 @@ async function handleFicharCommand(interaction) {
     if (targetUser.id === requester.id) {
         return await interaction.reply({
             content: '❌ No puedes ficharte a ti mismo.',
+            ephemeral: true
+        });
+    }
+
+    // Verificar permisos de administrador
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
+        !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+        return await interaction.reply({
+            content: '❌ No tienes permisos para enviar solicitudes de fichaje.',
             ephemeral: true
         });
     }
@@ -133,6 +169,45 @@ async function handleFicharCommand(interaction) {
     }
 }
 
+async function handleBajarCommand(interaction) {
+    const targetUser = interaction.options.getUser('jugador');
+    const motivo = interaction.options.getString('motivo');
+    const requester = interaction.user;
+
+    // Verificar que no sea un bot
+    if (targetUser.bot) {
+        return await interaction.reply({
+            content: '❌ No puedes bajar a un bot.',
+            ephemeral: true
+        });
+    }
+
+    // Verificar permisos de administrador
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
+        !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+        return await interaction.reply({
+            content: '❌ No tienes permisos para bajar jugadores.',
+            ephemeral: true
+        });
+    }
+
+    try {
+        await notifyPlayerDismissal(interaction.guild, targetUser, requester, motivo);
+        
+        await interaction.reply({
+            content: `✅ Se ha notificado que ${targetUser.username} fue bajado del equipo.`,
+            ephemeral: true
+        });
+
+    } catch (error) {
+        console.error('Error al procesar baja de jugador:', error);
+        await interaction.reply({
+            content: '❌ Ocurrió un error al procesar la baja del jugador.',
+            ephemeral: true
+        });
+    }
+}
+
 // Manejo de interacciones con botones
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
@@ -141,7 +216,7 @@ client.on('interactionCreate', async interaction => {
         await handleSigningResponse(interaction, true);
     } else if (interaction.customId === 'reject_signing') {
         await handleSigningResponse(interaction, false);
-    } else if (interaction.customId === 'admin_confirm_signing') {
+    } else if (interaction.customId.startsWith('admin_confirm_signing_')) {
         await handleAdminConfirmation(interaction);
     }
 });
@@ -256,28 +331,77 @@ async function notifyAdmins(guild, targetUser, requester, accepted, signingId) {
     }
 }
 
-async function handleAdminConfirmation(interaction) {
-    // Extraer el signing ID del custom ID
-    const signingId = interaction.customId.replace('admin_confirm_signing_', '');
-    const signingData = pendingSignings.get(signingId);
-
-    if (!signingData) {
-        return await interaction.reply({
-            content: '❌ No se encontró la solicitud de fichaje correspondiente.',
-            ephemeral: true
-        });
-    }
-
-    // Verificar permisos de administrador
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
-        !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
-        return await interaction.reply({
-            content: '❌ No tienes permisos para confirmar fichajes.',
-            ephemeral: true
-        });
+async function notifyPlayerDismissal(guild, targetUser, requester, motivo) {
+    const dismissalsChannelId = config.DISMISSALS_CHANNEL_ID;
+    
+    if (!dismissalsChannelId) {
+        console.error('❌ DISMISSALS_CHANNEL_ID no configurado en config.json');
+        return;
     }
 
     try {
+        const dismissalsChannel = await guild.channels.fetch(dismissalsChannelId);
+        
+        if (!dismissalsChannel) {
+            console.error('❌ No se encontró el canal de bajas');
+            return;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#ff4444')
+            .setTitle('📉 Baja de Jugador')
+            .setDescription(`Se ha dado de baja a un jugador del equipo.`)
+            .addFields(
+                { name: '👤 Jugador bajado:', value: `${targetUser}`, inline: true },
+                { name: '🛡️ Bajado por:', value: `${requester}`, inline: true },
+                { name: '📅 Fecha:', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
+            )
+            .setThumbnail(targetUser.displayAvatarURL())
+            .setFooter({ text: 'Baja procesada' });
+
+        // Agregar motivo si fue proporcionado
+        if (motivo) {
+            embed.addFields({
+                name: '📝 Motivo:',
+                value: motivo,
+                inline: false
+            });
+        }
+
+        await dismissalsChannel.send({
+            embeds: [embed]
+        });
+
+    } catch (error) {
+        console.error('Error al notificar baja de jugador:', error);
+    }
+}
+
+async function handleAdminConfirmation(interaction) {
+    try {
+        // Extraer el signing ID del custom ID
+        const signingId = interaction.customId.replace('admin_confirm_signing_', '');
+        console.log(`🔍 Buscando signing ID: ${signingId}`);
+        console.log(`🗺 Solicitudes pendientes: ${Array.from(pendingSignings.keys()).join(', ')}`);
+        
+        const signingData = pendingSignings.get(signingId);
+
+        if (!signingData) {
+            return await interaction.reply({
+                content: `❌ No se encontró la solicitud de fichaje correspondiente. ID buscado: ${signingId}`,
+                ephemeral: true
+            });
+        }
+
+        // Verificar permisos de administrador
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
+            !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+            return await interaction.reply({
+                content: '❌ No tienes permisos para confirmar fichajes.',
+                ephemeral: true
+            });
+        }
+
         const targetUser = await client.users.fetch(signingData.targetUserId);
         const admin = interaction.user;
 
@@ -302,11 +426,17 @@ async function handleAdminConfirmation(interaction) {
         console.log(`✅ Fichaje confirmado: ${targetUser.username} por ${admin.username}`);
 
     } catch (error) {
-        console.error('Error al confirmar fichaje:', error);
-        await interaction.reply({
-            content: '❌ Ocurrió un error al confirmar el fichaje.',
-            ephemeral: true
-        });
+        console.error('Error completo al confirmar fichaje:', error);
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: `❌ Ocurrió un error al confirmar el fichaje: ${error.message}`,
+                    ephemeral: true
+                });
+            }
+        } catch (replyError) {
+            console.error('Error al enviar respuesta de error:', replyError);
+        }
     }
 }
 
