@@ -274,7 +274,8 @@ async function handleFicharCommand(interaction) {
         
         const publicMessage = await interaction.reply({
             content: mensajePublico,
-            components: [publicRow]
+            components: [publicRow],
+            fetchReply: true
         });
 
         // Guardar el ID del mensaje público para referencia
@@ -320,7 +321,8 @@ async function handleFicharCommand(interaction) {
 
         const publicMessage = await interaction.reply({
             content: mensajePublico,
-            components: [publicRow]
+            components: [publicRow],
+            fetchReply: true
         });
 
         // Guardar referencia al mensaje público
