@@ -78,6 +78,11 @@ async function registerCommands() {
                 option.setName('jugador')
                     .setDescription('El jugador al que quieres enviar la solicitud de fichaje')
                     .setRequired(true)
+            )
+            .addStringOption(option =>
+                option.setName('tipo')
+                    .setDescription('Tipo de fichaje: art o libre')
+                    .setRequired(true)
             ),
         new SlashCommandBuilder()
             .setName('bajar')
@@ -169,6 +174,17 @@ async function handleFicharCommand(interaction) {
     const targetUser = interaction.options.getUser('jugador');
     const requester = interaction.user;
 
+    // Leer y validar el tipo (art o libre)
+    const tipoRaw = interaction.options.getString('tipo');
+    const tipo = (tipoRaw || '').trim().toLowerCase();
+    if (!['art', 'libre'].includes(tipo)) {
+        return await interaction.reply({
+            content: '❌ El parámetro "tipo" debe ser "art" o "libre".',
+            ephemeral: true
+        });
+    }
+    const tipoEmoji = tipo === 'art' ? '<:ART:1380746252513317015>' : '✍️';
+
     console.log('🔍 Procesando comando /fichar...');
     console.log('📝 Canal actual:', interaction.channel.name);
     console.log('📁 Canal padre:', interaction.channel.parent?.name || 'Sin padre');
@@ -206,7 +222,7 @@ async function handleFicharCommand(interaction) {
         // Crear embed para el DM
         const dmEmbed = new EmbedBuilder()
             .setColor('#0099ff')
-            .setTitle('📋 Solicitud de Fichaje')
+            .setTitle(`${tipoEmoji} Solicitud de Fichaje`)
             .setDescription(`¡Hola ${targetUser.username}!\n\nHas recibido una solicitud de fichaje del servidor **${interaction.guild.name}**.`)
             .addFields(
                 { name: '👤 Solicitado por:', value: `${requester.username}`, inline: true },
@@ -248,7 +264,9 @@ async function handleFicharCommand(interaction) {
             dmMessageId: dmMessage.id,
             timestamp: Date.now(),
             equipo: equipoInfo.equipo,
-            modalidad: equipoInfo.modalidad
+            modalidad: equipoInfo.modalidad,
+            tipo,
+            tipoEmoji
         });
 
         // Guardar el ID en el mensaje DM para referencia
@@ -270,7 +288,7 @@ async function handleFicharCommand(interaction) {
             );
 
         // Enviar mensaje público informando sobre la solicitud de fichaje
-        const mensajePublico = `📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${equipoInfo.equipo} en modalidad ${equipoInfo.modalidad}.\n-# Se está esperando una respuesta por MD para confirmar la subida del jugador a la plantilla.\n-# O puedes responder directamente con los botones de abajo:`;
+        const mensajePublico = `${tipoEmoji} 📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${equipoInfo.equipo} en modalidad ${equipoInfo.modalidad}.\n-# Se está esperando una respuesta por MD para confirmar la subida del jugador a la plantilla.\n-# O puedes responder directamente con los botones de abajo:`;
         
         const publicMessage = await interaction.reply({
             content: mensajePublico,
@@ -298,7 +316,9 @@ async function handleFicharCommand(interaction) {
             dmMessageId: null,
             timestamp: Date.now(),
             equipo: equipoInfo.equipo,
-            modalidad: equipoInfo.modalidad
+            modalidad: equipoInfo.modalidad,
+            tipo,
+            tipoEmoji
         });
 
         // Crear botones públicos
@@ -317,7 +337,7 @@ async function handleFicharCommand(interaction) {
             );
 
         // Mensaje público mencionando al jugador para que pueda responder
-        const mensajePublico = `📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${equipoInfo.equipo} en modalidad ${equipoInfo.modalidad}.\n-# No se pudo enviar DM al jugador, puede responder aquí con los botones de abajo:`;
+        const mensajePublico = `${tipoEmoji} 📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${equipoInfo.equipo} en modalidad ${equipoInfo.modalidad}.\n-# No se pudo enviar DM al jugador, puede responder aquí con los botones de abajo:`;
 
         const publicMessage = await interaction.reply({
             content: mensajePublico,
@@ -448,7 +468,8 @@ async function handlePublicSigningResponse(interaction, accepted, signingId) {
         const targetUser = interaction.user;
         
         // Actualizar el mensaje público
-        const updatedContent = `📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${signingData.equipo} en modalidad ${signingData.modalidad}.\n\n${accepted ? '✅' : '❌'} **${targetUser.username} ${accepted ? 'ACEPTA' : 'RECHAZA'} el fichaje**`;
+        const tipoEmoji = signingData?.tipoEmoji || '';
+        const updatedContent = `${tipoEmoji} 📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${signingData.equipo} en modalidad ${signingData.modalidad}.\n\n${accepted ? '✅' : '❌'} **${targetUser.username} ${accepted ? 'ACEPTA' : 'RECHAZA'} el fichaje**`;
         
         await interaction.update({
             content: updatedContent,
@@ -541,7 +562,8 @@ async function handleSigningResponse(interaction, accepted, source = 'dm') {
             if (channelId && publicMessageId) {
                 const channel = await guild.channels.fetch(channelId);
                 if (channel) {
-                    const updatedContent = `📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${signingData.equipo} en modalidad ${signingData.modalidad}.\n\n${accepted ? '✅' : '❌'} **${targetUser.username} ${accepted ? 'ACEPTA' : 'RECHAZA'} el fichaje**`;
+                    const tipoEmoji = signingData?.tipoEmoji || '';
+                    const updatedContent = `${tipoEmoji} 📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${signingData.equipo} en modalidad ${signingData.modalidad}.\n\n${accepted ? '✅' : '❌'} **${targetUser.username} ${accepted ? 'ACEPTA' : 'RECHAZA'} el fichaje**`;
                     const publicMsg = await channel.messages.fetch(publicMessageId);
                     await publicMsg.edit({
                         content: updatedContent,
@@ -591,9 +613,11 @@ async function notifyAdmins(guild, targetUser, requester, accepted, signingId) {
         const equipo = signingData?.equipo || 'Equipo no identificado';
         const modalidad = signingData?.modalidad || 'MODALIDAD';
 
+        const signingData = pendingSignings.get(signingId);
+        const tipoEmoji = signingData?.tipoEmoji || '';
         const embed = new EmbedBuilder()
             .setColor(accepted ? '#00ff00' : '#ff0000')
-            .setTitle('📋 Respuesta de Fichaje')
+            .setTitle(`${tipoEmoji} 📋 Respuesta de Fichaje`)
             .setDescription(`${targetUser} ha respondido a la solicitud de fichaje.`)
             .addFields(
                 { name: '👤 Jugador:', value: `${targetUser}`, inline: true },
