@@ -1,6 +1,12 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const config = require('./config.json');
 
+console.log('🚀 Iniciando bot...');
+console.log('🔑 Token configurado:', config.TOKEN ? config.TOKEN.substring(0, 20) + '...' : 'NO CONFIGURADO');
+console.log('📢 Canal de fichajes:', config.SIGNINGS_CHANNEL_ID || 'NO CONFIGURADO');
+console.log('📉 Canal de bajas:', config.DISMISSALS_CHANNEL_ID || 'NO CONFIGURADO');
+console.log('👥 Roles admin:', config.ADMIN_ROLE_IDS ? config.ADMIN_ROLE_IDS.length : 0);
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -11,11 +17,53 @@ const client = new Client({
     ]
 });
 
+console.log('⚙️ Cliente Discord creado');
+
 // Almacena las solicitudes de fichaje pendientes
 const pendingSignings = new Map();
 
+// Función para extraer información del equipo y modalidad
+function extractTeamAndModality(interaction) {
+    const channelName = interaction.channel.name || '';
+    const parentName = interaction.channel.parent?.name || '';
+    
+    console.log('🔎 Analizando nombres:');
+    console.log('  Canal:', channelName);
+    console.log('  Padre:', parentName);
+    
+    let equipo = 'Equipo no identificado';
+    let modalidad = 'MODALIDAD';
+    
+    // Extraer nombre del equipo del nombre del canal
+    // Formato esperado: "Nombre del equipo - ABREVIACION"
+    const equipoMatch = channelName.match(/^([^-]+)\s*-/);
+    if (equipoMatch) {
+        equipo = equipoMatch[1].trim();
+        console.log('✅ Equipo encontrado:', equipo);
+    } else {
+        console.log('⚠️ No se pudo extraer el equipo del canal:', channelName);
+    }
+    
+    // Extraer modalidad del nombre del foro padre
+    // Formato esperado: "︲💼┃equipos-biggerx7"
+    const modalidadMatch = parentName.match(/equipos-(bigger[\w\d]+)/i);
+    if (modalidadMatch) {
+        modalidad = modalidadMatch[1].toUpperCase();
+        console.log('✅ Modalidad encontrada:', modalidad);
+    } else {
+        console.log('⚠️ No se pudo extraer la modalidad del foro:', parentName);
+    }
+    
+    return { equipo, modalidad };
+}
+
 client.once('ready', () => {
-    console.log(`✅ Bot conectado como ${client.user.tag}`);
+    console.log(`✅ Bot conectado exitosamente como ${client.user.tag}`);
+    console.log(`🎮 Conectado a ${client.guilds.cache.size} servidor(es)`);
+    
+    client.guilds.cache.forEach(guild => {
+        console.log(`  • ${guild.name} (${guild.id}) - ${guild.memberCount} miembros`);
+    });
     
     // Registrar comando slash
     registerCommands();
@@ -47,17 +95,25 @@ async function registerCommands() {
     ];
 
     try {
-        console.log('🔄 Limpiando comandos existentes...');
+        console.log('🗑️ ELIMINANDO TODOS los comandos globales...');
         await client.application.commands.set([]);
         
-        console.log('🔄 Registrando comandos globalmente...');
-        await client.application.commands.set(commands);
-        
-        // También registrar para cada servidor donde está el bot
-        console.log('🔄 Registrando comandos en servidores...');
+        console.log('🗑️ ELIMINANDO TODOS los comandos de servidores...');
         for (const guild of client.guilds.cache.values()) {
-            await guild.commands.set(commands);
-            console.log(`✅ Comandos registrados en ${guild.name}`);
+            console.log(`🗑️ Eliminando comandos de ${guild.name}...`);
+            await guild.commands.set([]);
+        }
+        
+        console.log('⏳ Esperando 3 segundos para asegurar limpieza...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        console.log('🆕 REGISTRANDO comandos SOLO en el servidor principal...');
+        const mainGuild = client.guilds.cache.get('1210830619228119090'); // LNB
+        if (mainGuild) {
+            await mainGuild.commands.set(commands);
+            console.log(`✅ Comandos registrados SOLO en ${mainGuild.name}`);
+        } else {
+            console.error('❌ No se encontró el servidor principal!');
         }
         
         console.log('✅ Comandos registrados exitosamente');
@@ -68,19 +124,54 @@ async function registerCommands() {
 }
 
 // Manejo de comandos slash
+console.log('🔧 Registrando event listener para interactionCreate...');
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+    console.log('🚀 ¡INTERACCIÓN RECIBIDA!');
+    try {
+        console.log('🔄 Detalles:', {
+            tipo: interaction.type,
+            comando: interaction.commandName || 'N/A',
+            usuario: interaction.user?.username || 'N/A',
+            canal: interaction.channel?.name || 'N/A',
+            servidor: interaction.guild?.name || 'N/A'
+        });
+        
+        if (!interaction.isChatInputCommand()) {
+            console.log('ℹ️ No es comando de chat, ignorando');
+            return;
+        }
+        
+        console.log(`⚙️ Procesando comando: /${interaction.commandName}`);
 
-    if (interaction.commandName === 'fichar') {
-        await handleFicharCommand(interaction);
-    } else if (interaction.commandName === 'bajar') {
-        await handleBajarCommand(interaction);
+        if (interaction.commandName === 'fichar') {
+            await handleFicharCommand(interaction);
+        } else if (interaction.commandName === 'bajar') {
+            await handleBajarCommand(interaction);
+        } else {
+            console.log(`⚠️ Comando desconocido: ${interaction.commandName}`);
+        }
+    } catch (error) {
+        console.error('❌ Error procesando interacción:', error);
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Ocurrió un error interno. Inténtalo de nuevo.',
+                    ephemeral: true
+                });
+            }
+        } catch (replyError) {
+            console.error('❌ Error enviando respuesta de error:', replyError);
+        }
     }
 });
 
 async function handleFicharCommand(interaction) {
     const targetUser = interaction.options.getUser('jugador');
     const requester = interaction.user;
+
+    console.log('🔍 Procesando comando /fichar...');
+    console.log('📝 Canal actual:', interaction.channel.name);
+    console.log('📁 Canal padre:', interaction.channel.parent?.name || 'Sin padre');
 
     // Verificar que no sea un bot
     if (targetUser.bot) {
@@ -107,6 +198,10 @@ async function handleFicharCommand(interaction) {
         });
     }
 
+    // Extraer información del equipo y modalidad
+    const equipoInfo = extractTeamAndModality(interaction);
+    console.log('🛡️ Información extraída:', equipoInfo);
+
     try {
         // Crear embed para el DM
         const dmEmbed = new EmbedBuilder()
@@ -115,7 +210,9 @@ async function handleFicharCommand(interaction) {
             .setDescription(`¡Hola ${targetUser.username}!\n\nHas recibido una solicitud de fichaje del servidor **${interaction.guild.name}**.`)
             .addFields(
                 { name: '👤 Solicitado por:', value: `${requester.username}`, inline: true },
-                { name: '🗓️ Fecha:', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                { name: '🗺️ Fecha:', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+                { name: '🛡️ Equipo:', value: `${equipoInfo.equipo}`, inline: true },
+                { name: '🎮 Modalidad:', value: `${equipoInfo.modalidad}`, inline: true }
             )
             .setThumbnail(interaction.guild.iconURL())
             .setFooter({ text: 'Responde con los botones de abajo' });
@@ -149,23 +246,90 @@ async function handleFicharCommand(interaction) {
             requesterId: requester.id,
             guildId: interaction.guild.id,
             dmMessageId: dmMessage.id,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            equipo: equipoInfo.equipo,
+            modalidad: equipoInfo.modalidad
         });
 
         // Guardar el ID en el mensaje DM para referencia
         dmMessage.signingId = signingId;
 
-        await interaction.reply({
-            content: `✅ Se ha enviado una solicitud de fichaje a ${targetUser.username}. Recibirás una notificación cuando responda.`,
-            ephemeral: true
+        // Crear botones para el mensaje público
+        const publicRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`public_accept_${signingId}`)
+                    .setLabel('Acepto fichar')
+                    .setEmoji('✅')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`public_reject_${signingId}`)
+                    .setLabel('Rechazo')
+                    .setEmoji('❌')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
+        // Enviar mensaje público informando sobre la solicitud de fichaje
+        const mensajePublico = `📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${equipoInfo.equipo} en modalidad ${equipoInfo.modalidad}.\n-# Se está esperando una respuesta por MD para confirmar la subida del jugador a la plantilla.\n-# O puedes responder directamente con los botones de abajo:`;
+        
+        const publicMessage = await interaction.reply({
+            content: mensajePublico,
+            components: [publicRow]
         });
 
+        // Guardar el ID del mensaje público para referencia
+        const updatedSigningData = pendingSignings.get(signingId);
+        if (updatedSigningData) {
+            updatedSigningData.publicMessageId = publicMessage.id;
+            updatedSigningData.channelId = interaction.channel.id;
+            pendingSignings.set(signingId, updatedSigningData);
+        }
+
     } catch (error) {
-        console.error('Error al enviar DM:', error);
-        await interaction.reply({
-            content: `❌ No se pudo enviar el mensaje directo a ${targetUser.username}. Es posible que tenga los DMs deshabilitados.`,
-            ephemeral: true
+        console.error('Error al enviar DM, usando fallback a mensaje público:', error);
+
+        // Crear una solicitud pendiente sin DM
+        const signingId = `${interaction.guild.id}_${targetUser.id}_${Date.now()}`;
+        pendingSignings.set(signingId, {
+            targetUserId: targetUser.id,
+            requesterId: requester.id,
+            guildId: interaction.guild.id,
+            dmMessageId: null,
+            timestamp: Date.now(),
+            equipo: equipoInfo.equipo,
+            modalidad: equipoInfo.modalidad
         });
+
+        // Crear botones públicos
+        const publicRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`public_accept_${signingId}`)
+                    .setLabel('Acepto fichar')
+                    .setEmoji('✅')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`public_reject_${signingId}`)
+                    .setLabel('Rechazo')
+                    .setEmoji('❌')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
+        // Mensaje público mencionando al jugador para que pueda responder
+        const mensajePublico = `📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${equipoInfo.equipo} en modalidad ${equipoInfo.modalidad}.\n-# No se pudo enviar DM al jugador, puede responder aquí con los botones de abajo:`;
+
+        const publicMessage = await interaction.reply({
+            content: mensajePublico,
+            components: [publicRow]
+        });
+
+        // Guardar referencia al mensaje público
+        const updatedSigningData = pendingSignings.get(signingId);
+        if (updatedSigningData) {
+            updatedSigningData.publicMessageId = publicMessage.id;
+            updatedSigningData.channelId = interaction.channel.id;
+            pendingSignings.set(signingId, updatedSigningData);
+        }
     }
 }
 
@@ -173,6 +337,10 @@ async function handleBajarCommand(interaction) {
     const targetUser = interaction.options.getUser('jugador');
     const motivo = interaction.options.getString('motivo');
     const requester = interaction.user;
+
+    // Extraer información del equipo y modalidad para la baja
+    const equipoInfoBaja = extractTeamAndModality(interaction);
+    console.log('🛡️ Información extraída para baja:', equipoInfoBaja);
 
     // Verificar que no sea un bot
     if (targetUser.bot) {
@@ -192,12 +360,35 @@ async function handleBajarCommand(interaction) {
     }
 
     try {
-        await notifyPlayerDismissal(interaction.guild, targetUser, requester, motivo);
-        
+        // Crear el embed de baja
+        const embed = new EmbedBuilder()
+            .setColor('#ff4444')
+            .setTitle('📉 Baja de Jugador')
+            .setDescription(`Se ha dado de baja a un jugador del equipo.`)
+            .addFields(
+                { name: '👤 Jugador bajado:', value: `${targetUser}`, inline: true },
+                { name: '🛡️ Bajado por:', value: `${requester}`, inline: true },
+                { name: '📅 Fecha:', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
+            )
+            .setThumbnail(targetUser.displayAvatarURL())
+            .setFooter({ text: 'Baja procesada' });
+
+        // Agregar motivo si fue proporcionado
+        if (motivo) {
+            embed.addFields({
+                name: '📝 Motivo:',
+                value: motivo,
+                inline: false
+            });
+        }
+
+        // Enviar embed al canal donde se ejecutó el comando
         await interaction.reply({
-            content: `✅ Se ha notificado que ${targetUser.username} fue bajado del equipo.`,
-            ephemeral: true
+            embeds: [embed]
         });
+
+        // También notificar al canal de bajas si está configurado (incluye equipo y modalidad)
+        await notifyPlayerDismissal(interaction.guild, targetUser, requester, motivo, equipoInfoBaja);
 
     } catch (error) {
         console.error('Error al procesar baja de jugador:', error);
@@ -213,15 +404,94 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
     if (interaction.customId === 'accept_signing') {
-        await handleSigningResponse(interaction, true);
+        await handleSigningResponse(interaction, true, 'dm');
     } else if (interaction.customId === 'reject_signing') {
-        await handleSigningResponse(interaction, false);
+        await handleSigningResponse(interaction, false, 'dm');
+    } else if (interaction.customId.startsWith('public_accept_')) {
+        const signingId = interaction.customId.replace('public_accept_', '');
+        await handlePublicSigningResponse(interaction, true, signingId);
+    } else if (interaction.customId.startsWith('public_reject_')) {
+        const signingId = interaction.customId.replace('public_reject_', '');
+        await handlePublicSigningResponse(interaction, false, signingId);
     } else if (interaction.customId.startsWith('admin_confirm_signing_')) {
         await handleAdminConfirmation(interaction);
     }
 });
 
-async function handleSigningResponse(interaction, accepted) {
+async function handlePublicSigningResponse(interaction, accepted, signingId) {
+    const userId = interaction.user.id;
+    
+    console.log(`🔄 Respuesta pública recibida de ${interaction.user.username}: ${accepted ? 'ACEPTA' : 'RECHAZA'}`);
+    
+    const signingData = pendingSignings.get(signingId);
+    
+    if (!signingData) {
+        return await interaction.reply({
+            content: '❌ No se encontró la solicitud de fichaje correspondiente.',
+            ephemeral: true
+        });
+    }
+    
+    // Verificar que solo el jugador objetivo puede responder
+    if (userId !== signingData.targetUserId) {
+        return await interaction.reply({
+            content: '❌ Solo el jugador que fue fichado puede responder a esta solicitud.',
+            ephemeral: true
+        });
+    }
+    
+    try {
+        const guild = await client.guilds.fetch(signingData.guildId);
+        const requester = await client.users.fetch(signingData.requesterId);
+        const targetUser = interaction.user;
+        
+        // Actualizar el mensaje público
+        const updatedContent = `📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${signingData.equipo} en modalidad ${signingData.modalidad}.\n\n${accepted ? '✅' : '❌'} **${targetUser.username} ${accepted ? 'ACEPTA' : 'RECHAZA'} el fichaje**`;
+        
+        await interaction.update({
+            content: updatedContent,
+            components: [] // Remover botones
+        });
+        
+        // Enviar notificación al canal de fichajes
+        await notifyAdmins(guild, targetUser, requester, accepted, signingId);
+        
+        // Actualizar DM si existe
+        try {
+            const dmChannel = await targetUser.createDM();
+            const dmMessage = await dmChannel.messages.fetch(signingData.dmMessageId);
+            
+            const updatedEmbed = EmbedBuilder.from(dmMessage.embeds[0])
+                .setColor(accepted ? '#00ff00' : '#ff0000')
+                .addFields({
+                    name: '📊 Respuesta:',
+                    value: accepted ? '✅ **ACEPTA** fichar' : '❌ **RECHAZA** fichar',
+                    inline: false
+                });
+            
+            await dmMessage.edit({
+                embeds: [updatedEmbed],
+                components: []
+            });
+        } catch (dmError) {
+            console.log('ℹ️ No se pudo actualizar el DM (probablemente no existe):', dmError.message);
+        }
+        
+        // Si fue rechazado, remover de pendientes
+        if (!accepted) {
+            pendingSignings.delete(signingId);
+        }
+        
+    } catch (error) {
+        console.error('Error al procesar respuesta pública de fichaje:', error);
+        await interaction.reply({
+            content: '❌ Ocurrió un error al procesar tu respuesta.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleSigningResponse(interaction, accepted, source = 'dm') {
     const userId = interaction.user.id;
     
     // Buscar la solicitud correspondiente
@@ -262,6 +532,25 @@ async function handleSigningResponse(interaction, accepted) {
             components: [] // Remover botones
         });
 
+        // También actualizar el mensaje público en el foro si existe
+        try {
+            const channelId = signingData.channelId;
+            const publicMessageId = signingData.publicMessageId;
+            if (channelId && publicMessageId) {
+                const channel = await guild.channels.fetch(channelId);
+                if (channel) {
+                    const updatedContent = `📝 <@${requester.id}> quiere fichar a <@${targetUser.id}> para ${signingData.equipo} en modalidad ${signingData.modalidad}.\n\n${accepted ? '✅' : '❌'} **${targetUser.username} ${accepted ? 'ACEPTA' : 'RECHAZA'} el fichaje**`;
+                    const publicMsg = await channel.messages.fetch(publicMessageId);
+                    await publicMsg.edit({
+                        content: updatedContent,
+                        components: []
+                    });
+                }
+            }
+        } catch (updateErr) {
+            console.log('ℹ️ No se pudo actualizar el mensaje público del foro:', updateErr.message);
+        }
+
         // Enviar notificación al canal de fichajes
         await notifyAdmins(guild, targetUser, requester, accepted, signingId);
 
@@ -295,6 +584,11 @@ async function notifyAdmins(guild, targetUser, requester, accepted, signingId) {
             return;
         }
 
+        // Obtener información guardada del equipo y modalidad
+        const signingData = pendingSignings.get(signingId);
+        const equipo = signingData?.equipo || 'Equipo no identificado';
+        const modalidad = signingData?.modalidad || 'MODALIDAD';
+
         const embed = new EmbedBuilder()
             .setColor(accepted ? '#00ff00' : '#ff0000')
             .setTitle('📋 Respuesta de Fichaje')
@@ -303,7 +597,9 @@ async function notifyAdmins(guild, targetUser, requester, accepted, signingId) {
                 { name: '👤 Jugador:', value: `${targetUser}`, inline: true },
                 { name: '🎯 Solicitado por:', value: `${requester}`, inline: true },
                 { name: '📊 Respuesta:', value: accepted ? '✅ **ACEPTA**' : '❌ **RECHAZA**', inline: true },
-                { name: '🗓️ Fecha:', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
+                { name: '🛡️ Equipo:', value: `${equipo}`, inline: true },
+                { name: '🎮 Modalidad:', value: `${modalidad}`, inline: true },
+                { name: '🗺️ Fecha:', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
             )
             .setThumbnail(targetUser.displayAvatarURL())
             .setFooter({ text: accepted ? 'Reacciona con ✅ para confirmar el fichaje en la planilla' : 'Fichaje rechazado' });
@@ -331,7 +627,7 @@ async function notifyAdmins(guild, targetUser, requester, accepted, signingId) {
     }
 }
 
-async function notifyPlayerDismissal(guild, targetUser, requester, motivo) {
+async function notifyPlayerDismissal(guild, targetUser, requester, motivo, equipoInfo) {
     const dismissalsChannelId = config.DISMISSALS_CHANNEL_ID;
     
     if (!dismissalsChannelId) {
@@ -354,6 +650,8 @@ async function notifyPlayerDismissal(guild, targetUser, requester, motivo) {
             .addFields(
                 { name: '👤 Jugador bajado:', value: `${targetUser}`, inline: true },
                 { name: '🛡️ Bajado por:', value: `${requester}`, inline: true },
+                { name: '🛡️ Equipo:', value: `${equipoInfo?.equipo || 'Equipo no identificado'}`, inline: true },
+                { name: '🎮 Modalidad:', value: `${equipoInfo?.modalidad || 'MODALIDAD'}`, inline: true },
                 { name: '📅 Fecha:', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
             )
             .setThumbnail(targetUser.displayAvatarURL())
@@ -407,7 +705,7 @@ async function handleAdminConfirmation(interaction) {
 
         // Actualizar el embed
         const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-            .setColor('#gold')
+            .setColor('#FFD700')
             .addFields({
                 name: '✅ Confirmado por:',
                 value: `${admin} - <t:${Math.floor(Date.now() / 1000)}:F>`,
@@ -441,7 +739,24 @@ async function handleAdminConfirmation(interaction) {
 }
 
 // Manejo de errores
-client.on('error', console.error);
+client.on('error', (error) => {
+    console.error('🚫 Error del cliente Discord:', error);
+});
+
+// Manejo de warnings
+client.on('warn', (warning) => {
+    console.warn('⚠️ Warning del cliente Discord:', warning);
+});
+
+// Debug para tokens inválidos
+client.on('invalidated', () => {
+    console.error('🚫 TOKEN INVALIDADO - El token del bot ha sido invalidado por Discord!');
+});
+
+// Debug para rate limits
+client.on('rateLimit', (rateLimitData) => {
+    console.warn('🕰️ Rate limit:', rateLimitData);
+});
 
 process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
