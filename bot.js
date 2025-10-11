@@ -9,6 +9,42 @@ const {
     removePendingSigning
 } = require('./dataManager.js');
 
+let config;
+try {
+    config = require('./config.json');
+} catch (error) {
+    if (error.code === 'MODULE_NOT_FOUND') {
+        console.error("❌ Error: No se encontró el archivo 'config.json'.");
+        console.error("Por favor, renombra 'config.template.json' a 'config.json' y rellena los campos necesarios.");
+        process.exit(1); // Detiene la ejecución si no hay configuración
+    } else {
+        throw error;
+    }
+}
+
+const logWebhook = config.LOG_WEBHOOK_URL ? new WebhookClient({ url: config.LOG_WEBHOOK_URL }) : null;
+if (logWebhook) {
+    console.log('📢 Webhook de logs configurado.');
+}
+
+console.log('🚀 Iniciando bot...');
+console.log('🔑 Token configurado:', config.TOKEN ? config.TOKEN.substring(0, 20) + '...' : 'NO CONFIGURADO');
+console.log('📢 Canal de fichajes:', config.SIGNINGS_CHANNEL_ID || 'NO CONFIGURADO');
+console.log('📉 Canal de bajas:', config.DISMISSALS_CHANNEL_ID || 'NO CONFIGURADO');
+console.log('👥 Roles admin:', config.ADMIN_ROLE_IDS ? config.ADMIN_ROLE_IDS.length : 0);
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMessageReactions
+    ]
+});
+console.log('⚙️ Cliente Discord creado');
+
+
 // --- Funciones Principales del Bot ---
 
 function extractTeamAndModality(interaction) {
