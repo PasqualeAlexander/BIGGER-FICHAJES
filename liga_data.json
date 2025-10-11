@@ -1,0 +1,76 @@
+{
+  "bigger_x3": {
+    "max_players": 9,
+    "teams": {
+      "Equipo 1": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      },
+      "Equipo 2": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      },
+      "Equipo 3": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      },
+      "Equipo 4": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      },
+      "Equipo 5": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      },
+      "Equipo 6": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      },
+      "Equipo 7": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      },
+      "Equipo 8": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      }
+    }
+  },
+  "bigger_x4": {
+    "max_players": 12,
+    "teams": {
+      "Equipo A": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      },
+      "Equipo B": {
+        "channel_id": null,
+        "message_id": null,
+        "articulos_usados": 0,
+        "jugadores_habilitados": []
+      }
+    }
+  },
+  "bigger_x7": {
+    "max_players": 20,
+    "teams": {}
+  }
+}
