@@ -1,4 +1,7 @@
-node_modules/
+node_modules
+config.json
+pending_signings.json
+liga_data.json/
 *.log
 .env
 config.json

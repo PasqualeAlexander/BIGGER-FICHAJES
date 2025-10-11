@@ -1,96 +1,13 @@
-const { Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
-const fs = require('fs');
-const fs_async = require('fs').promises;
-const path = require('path');
-const config = require('./config.json');
-
-// --- Carga de Datos de Plantillas ---
-let ligaData;
-try {
-    ligaData = JSON.parse(fs.readFileSync('liga_data.json', 'utf8'));
-} catch (error) {
-    console.error("Error al cargar liga_data.json:", error);
-    process.exit(1);
-}
-
-function saveData() {
-    try {
-        fs.writeFileSync('liga_data.json', JSON.stringify(ligaData, null, 2));
-        console.log('💾 Datos de plantilla guardados en liga_data.json');
-    } catch (error) {
-        console.error("Error al guardar datos en liga_data.json:", error);
-    }
-}
-
-console.log('🚀 Iniciando bot...');
-console.log('🔑 Token configurado:', config.TOKEN ? config.TOKEN.substring(0, 20) + '...' : 'NO CONFIGURADO');
-console.log('📢 Canal de fichajes:', config.SIGNINGS_CHANNEL_ID || 'NO CONFIGURADO');
-console.log('📉 Canal de bajas:', config.DISMISSALS_CHANNEL_ID || 'NO CONFIGURADO');
-console.log('👥 Roles admin:', config.ADMIN_ROLE_IDS ? config.ADMIN_ROLE_IDS.length : 0);
-
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMessageReactions
-    ]
-});
-
-console.log('⚙️ Cliente Discord creado');
-
-// --- Lógica para Solicitudes de Fichaje Pendientes (Persistente) ---
-const PENDING_SIGNINGS_FILE = path.join(__dirname, 'pending_signings.json');
-const pendingSignings = new Map();
-
-async function loadPendingSignings() {
-    try {
-        console.log('📂 Cargando solicitudes pendientes desde archivo...');
-        const data = await fs_async.readFile(PENDING_SIGNINGS_FILE, 'utf8');
-        const signingsData = JSON.parse(data);
-        for (const [id, signing] of Object.entries(signingsData)) {
-            pendingSignings.set(id, signing);
-        }
-        console.log(`✅ Cargadas ${pendingSignings.size} solicitudes pendientes`);
-    } catch (error) {
-        if (error.code === 'ENOENT') {
-            console.log('ℹ️ No existe archivo de solicitudes pendientes, iniciando con datos vacíos');
-        } else {
-            console.error('❌ Error cargando solicitudes pendientes:', error);
-        }
-    }
-}
-
-async function savePendingSignings() {
-    try {
-        const signingsData = Object.fromEntries(pendingSignings);
-        await fs_async.writeFile(PENDING_SIGNINGS_FILE, JSON.stringify(signingsData, null, 2), 'utf8');
-        console.log(`💾 Guardadas ${pendingSignings.size} solicitudes pendientes`);
-    } catch (error) {
-        console.error('❌ Error guardando solicitudes pendientes:', error);
-    }
-}
-
-async function addPendingSigning(signingId, signingData) {
-    pendingSignings.set(signingId, signingData);
-    await savePendingSignings();
-}
-
-async function updatePendingSigning(signingId, signingData) {
-    if (pendingSignings.has(signingId)) {
-        pendingSignings.set(signingId, signingData);
-        await savePendingSignings();
-    }
-}
-
-async function removePendingSigning(signingId) {
-    if (pendingSignings.delete(signingId)) {
-        await savePendingSignings();
-        return true;
-    }
-    return false;
-}
+const { Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, WebhookClient } = require('discord.js');
+const {
+    ligaData,
+    saveData,
+    pendingSignings,
+    loadPendingSignings,
+    addPendingSigning,
+    updatePendingSigning,
+    removePendingSigning
+} = require('./dataManager.js');
 
 // --- Funciones Principales del Bot ---
 
@@ -138,10 +55,104 @@ async function registerCommands() {
         new SlashCommandBuilder()
             .setName('cancelar')
             .setDescription('Darse de baja de tu equipo actual')
-            .addStringOption(option => option.setName('motivo').setDescription('Motivo de tu baja (opcional)').setRequired(false))
-    ];
-
-    try {
+                        .addStringOption(option =>
+                            option.setName('motivo')
+                                .setDescription('Motivo de tu baja (opcional)')
+                                .setRequired(false)
+                        ),
+                    new SlashCommandBuilder()
+                        .setName('info')
+                        .setDescription('Muestra la información de un jugador (equipo, modalidad, rol)')
+                        .addUserOption(option => 
+                            option.setName('jugador')
+                                .setDescription('El jugador del que quieres ver la info')
+                                .setRequired(true)
+                        ),
+                    new SlashCommandBuilder()
+                        .setName('plantilla')
+                        .setDescription('Muestra la plantilla de un equipo específico')
+                        .addStringOption(option =>
+                            option.setName('modalidad')
+                                .setDescription('La modalidad del equipo')
+                                .setRequired(true)
+                                .setAutocomplete(true)
+                        )
+                                    .addStringOption(option =>
+                                        option.setName('equipo')
+                                            .setDescription('El nombre del equipo')
+                                            .setRequired(true)
+                                            .setAutocomplete(true)
+                                    ),
+                                new SlashCommandBuilder()
+                                    .setName('rol')
+                                    .setDescription('Modifica el rol de un jugador en una plantilla')
+                                    .addUserOption(option =>
+                                        option.setName('jugador')
+                                            .setDescription('El jugador al que quieres cambiar el rol')
+                                            .setRequired(true)
+                                    )
+                                                .addStringOption(option =>
+                                                    option.setName('rol')
+                                                        .setDescription('El nuevo rol que quieres asignar')
+                                                        .setRequired(true)
+                                                        .addChoices(
+                                                            { name: 'Capitán', value: 'C' },
+                                                            { name: 'Subcapitán', value: 'SC' },
+                                                            { name: 'Jugador', value: 'null' }
+                                                        )
+                                                ),
+                                            new SlashCommandBuilder()
+                                                .setName('equipo')
+                                                .setDescription('Gestiona los equipos de la liga')
+                                                .addSubcommand(subcommand =>
+                                                    subcommand
+                                                        .setName('crear')
+                                                        .setDescription('Crea un nuevo equipo en una modalidad')
+                                                        .addStringOption(option =>
+                                                            option.setName('nombre')
+                                                                .setDescription('El nombre del nuevo equipo')
+                                                                .setRequired(true)
+                                                        )
+                                                        .addStringOption(option =>
+                                                            option.setName('modalidad')
+                                                                .setDescription('La modalidad en la que se creará el equipo')
+                                                                .setRequired(true)
+                                                                .setAutocomplete(true)
+                                                        )
+                                                )
+                                                .addSubcommand(subcommand =>
+                                                    subcommand
+                                                        .setName('eliminar')
+                                                        .setDescription('Elimina un equipo existente de una modalidad')
+                                                        .addStringOption(option =>
+                                                            option.setName('nombre')
+                                                                .setDescription('El nombre del equipo a eliminar')
+                                                                .setRequired(true)
+                                                                .setAutocomplete(true)
+                                                        )
+                                                        .addStringOption(option =>
+                                                            option.setName('modalidad')
+                                                                .setDescription('La modalidad de la que se eliminará el equipo')
+                                                                .setRequired(true)
+                                                                .setAutocomplete(true)
+                                                        )
+                                                ),
+                                            new SlashCommandBuilder()
+                                                .setName('restablecer_plantilla')
+                                                .setDescription('Elimina TODOS los jugadores de una plantilla para iniciar una nueva temporada.')
+                                                .addStringOption(option =>
+                                                    option.setName('modalidad')
+                                                        .setDescription('La modalidad del equipo a restablecer')
+                                                        .setRequired(true)
+                                                        .setAutocomplete(true)
+                                                )
+                                                .addStringOption(option =>
+                                                    option.setName('equipo')
+                                                        .setDescription('El equipo a restablecer')
+                                                        .setRequired(true)
+                                                        .setAutocomplete(true)
+                                                )
+                                        ];    try {
         console.log('🆕 REGISTRANDO comandos SOLO en el servidor principal...');
         const mainGuild = client.guilds.cache.get('1210830619228119090'); // LNB
         if (mainGuild) {
@@ -167,22 +178,125 @@ client.on('interactionCreate', async interaction => {
                 await handleEstablecerPlantillaCommand(interaction);
             } else if (interaction.commandName === 'cancelar') {
                 await handleCancelarCommand(interaction);
+            } else if (interaction.commandName === 'info') {
+                await handleInfoCommand(interaction);
+            } else if (interaction.commandName === 'plantilla') {
+                await handlePlantillaCommand(interaction);
+            } else if (interaction.commandName === 'rol') {
+                await handleRolCommand(interaction);
+            } else if (interaction.commandName === 'equipo') {
+                await handleEquipoCommand(interaction);
+            } else if (interaction.commandName === 'restablecer_plantilla') {
+                await handleRestablecerPlantillaCommand(interaction);
             }
         } catch (error) {
             console.error('❌ Error procesando interacción de comando:', error);
         }
     } else if (interaction.isButton()) {
         try {
-            if (interaction.customId.startsWith('admin_confirm_signing_')) {
+            const customId = interaction.customId;
+
+            if (customId.startsWith('public_accept_') || customId.startsWith('public_reject_')) {
+                const accepted = customId.startsWith('public_accept_');
+                const signingId = customId.replace(/public_accept_|public_reject_/g, '');
+                await handlePublicSigningResponse(interaction, accepted, signingId);
+
+            } else if (customId.startsWith('admin_confirm_signing_')) {
                 await handleAdminConfirmation(interaction);
-            } else if (interaction.customId.startsWith('public_accept_') || interaction.customId.startsWith('public_reject_')) {
-                const [action, signingId] = interaction.customId.split(/_(.+)/s);
-                await handlePublicSigningResponse(interaction, action === 'public_accept', signingId);
-            } else if (interaction.customId === 'accept_signing' || interaction.customId === 'reject_signing') {
-                await handleSigningResponse(interaction, interaction.customId === 'accept_signing');
+
+            } else if (customId.startsWith('confirm_reset_')) {
+                if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+                    return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden confirmar esta acción.', ephemeral: true });
+                }
+                
+                const [, , modalityKey, equipo] = customId.split('_');
+                const teamData = ligaData[modalityKey]?.teams[equipo];
+
+                if (teamData) {
+                    teamData.jugadores_habilitados = [];
+                    teamData.articulos_usados = 0;
+                    await saveData();
+                    await updateTeamMessage(interaction.guild, modalityKey, equipo);
+
+                    await interaction.update({
+                        content: `✅ Plantilla de **${equipo}** restablecida con éxito.`,
+                        components: []
+                    });
+                } else {
+                    await interaction.update({
+                        content: '❌ Error: No se pudo encontrar el equipo para restablecer.',
+                        components: []
+                    });
+                }
+
+            } else if (customId.startsWith('cancel_reset_')) {
+                if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+                    return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden cancelar esta acción.', ephemeral: true });
+                }
+                await interaction.update({
+                    content: 'Operación cancelada.',
+                    components: []
+                });
+            } else if (customId.startsWith('confirm_delete_')) {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+                    return await interaction.reply({ content: '❌ No tienes permisos para confirmar esta acción.', ephemeral: true });
+                }
+
+                const [, , modalityKey, equipo] = customId.split('_');
+                if (ligaData[modalityKey]?.teams[equipo]) {
+                    delete ligaData[modalityKey].teams[equipo];
+                    await saveData();
+                    await interaction.update({
+                        content: `✅ El equipo **${equipo}** ha sido eliminado de la modalidad **${modalityKey.toUpperCase()}**.`,
+                        components: []
+                    });
+                } else {
+                    await interaction.update({
+                        content: '❌ Error: No se pudo encontrar el equipo para eliminar.',
+                        components: []
+                    });
+                }
+            } else if (customId.startsWith('cancel_delete_')) {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+                    return await interaction.reply({ content: '❌ No tienes permisos para cancelar esta acción.', ephemeral: true });
+                }
+                await interaction.update({
+                    content: 'Operación cancelada.',
+                    components: []
+                });
             }
         } catch (error) {
             console.error('❌ Error procesando interacción de botón:', error);
+        }
+    } else if (interaction.isAutocomplete()) {
+        try {
+            const focusedOption = interaction.options.getFocused(true);
+            let choices = [];
+
+            if (focusedOption.name === 'modalidad') {
+                choices = Object.keys(ligaData);
+            }
+
+            if (focusedOption.name === 'equipo') {
+                const modality = interaction.options.getString('modalidad');
+                if (modality && ligaData[modality.toLowerCase()]) {
+                    choices = Object.keys(ligaData[modality.toLowerCase()].teams);
+                }
+            }
+
+            if (interaction.commandName === 'equipo' && focusedOption.name === 'nombre') {
+                const modality = interaction.options.getString('modalidad');
+                if (modality && ligaData[modality.toLowerCase()]) {
+                    choices = Object.keys(ligaData[modality.toLowerCase()].teams);
+                }
+            }
+
+            const filtered = choices.filter(choice => choice.toLowerCase().startsWith(focusedOption.value.toLowerCase()));
+            await interaction.respond(
+                filtered.map(choice => ({ name: choice, value: choice })).slice(0, 25)
+            );
+        } catch (error) {
+            console.error('❌ Error en autocompletado:', error);
         }
     }
 });
@@ -196,8 +310,8 @@ async function handleFicharCommand(interaction) {
     if (!['art', 'libre'].includes(tipo)) {
         return await interaction.reply({ content: '❌ El "tipo" debe ser "art" o "libre".', ephemeral: true });
     }
-    if (targetUser.bot || targetUser.id === requester.id) {
-        return await interaction.reply({ content: '❌ No puedes ficharte a ti mismo o a un bot.', ephemeral: true });
+    if (targetUser.id === requester.id && rol !== 'C' && rol !== 'SC') {
+        return await interaction.reply({ content: '❌ Solo puedes ficharte a ti mismo para asignarte el rol de Capitán o Subcapitán.', ephemeral: true });
     }
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
         return await interaction.reply({ content: '❌ No tienes permisos para fichar.', ephemeral: true });
@@ -260,6 +374,10 @@ async function handleBajarCommand(interaction) {
 
     await notifyPlayerDismissal(interaction.guild, targetUser, requester, motivo, equipoInfoBaja);
     await updateTeamMessage(interaction.guild, modalityKey, teamName);
+
+    const logMessage = `📉 **BAJA:** ${targetUser.username} ha sido bajado de **${teamName}** por ${requester.username}. Motivo: ${motivo || 'No especificado'}`;
+    await logMovement(logMessage);
+
     await interaction.reply({ content: `✅ ${targetUser.username} ha sido bajado de ${teamName}.`, ephemeral: true });
 }
 
@@ -290,7 +408,199 @@ async function handleCancelarCommand(interaction) {
     await updateTeamMessage(interaction.guild, modalityKey, teamName);
     const equipoInfo = { equipo: teamName, modalidad: modalityKey.toUpperCase() };
     await notifyPlayerDismissal(interaction.guild, player, player, motivo || 'Baja voluntaria', equipoInfo);
+    
+    const logMessage = `↩️ **BAJA VOLUNTARIA:** ${player.username} ha dejado **${teamName}**. Motivo: ${motivo || 'No especificado'}`;
+    await logMovement(logMessage);
+
     await interaction.reply({ content: `✅ Te has dado de baja de **${teamName}**.`, ephemeral: true });
+}
+
+async function handleInfoCommand(interaction) {
+    const targetUser = interaction.options.getUser('jugador');
+    let playerInfo = null;
+
+    for (const modalityKey in ligaData) {
+        for (const teamName in ligaData[modalityKey].teams) {
+            const team = ligaData[modalityKey].teams[teamName];
+            const playerFound = team.jugadores_habilitados.find(p => p.id === targetUser.id);
+            if (playerFound) {
+                playerInfo = {
+                    teamName,
+                    modality: modalityKey.toUpperCase(),
+                    role: playerFound.rol ? (playerFound.rol === 'C' ? 'Capitán' : 'Subcapitán') : 'Jugador'
+                };
+                break;
+            }
+        }
+        if (playerInfo) break;
+    }
+
+    if (!playerInfo) {
+        return await interaction.reply({ content: `❌ ${targetUser.username} no está registrado en ningún equipo.`, ephemeral: true });
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor('#0099ff')
+        .setTitle(`Información de ${targetUser.username}`)
+        .setThumbnail(targetUser.displayAvatarURL())
+        .addFields(
+            { name: '🛡️ Equipo', value: playerInfo.teamName, inline: true },
+            { name: '🎮 Modalidad', value: playerInfo.modality, inline: true },
+            { name: '✨ Rol', value: playerInfo.role, inline: true }
+        );
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+async function handlePlantillaCommand(interaction) {
+    const modality = interaction.options.getString('modalidad');
+    const teamName = interaction.options.getString('equipo');
+    const modalityKey = modality.toLowerCase();
+
+    const teamData = ligaData[modalityKey]?.teams[teamName];
+
+    if (!teamData) {
+        return await interaction.reply({ content: `❌ No se encontró el equipo **${teamName}** en la modalidad **${modality}**.`, ephemeral: true });
+    }
+
+    const embed = await buildTeamEmbed(modalityKey, teamName);
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+async function handleRolCommand(interaction) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+        return await interaction.reply({ content: '❌ No tienes permisos para usar este comando.', ephemeral: true });
+    }
+
+    const targetUser = interaction.options.getUser('jugador');
+    const newRoleValue = interaction.options.getString('rol');
+    const newRole = newRoleValue === 'null' ? null : newRoleValue;
+
+    let playerInfo = null;
+    let playerToUpdate = null;
+
+    // Buscar al jugador
+    for (const modalityKey in ligaData) {
+        for (const teamName in ligaData[modalityKey].teams) {
+            const team = ligaData[modalityKey].teams[teamName];
+            const playerFound = team.jugadores_habilitados.find(p => p.id === targetUser.id);
+            if (playerFound) {
+                playerInfo = { modalityKey, teamName };
+                playerToUpdate = playerFound;
+                break;
+            }
+        }
+        if (playerInfo) break;
+    }
+
+    if (!playerInfo) {
+        return await interaction.reply({ content: `❌ ${targetUser.username} no está registrado en ningún equipo.`, ephemeral: true });
+    }
+
+    const oldRole = playerToUpdate.rol;
+    playerToUpdate.rol = newRole;
+    saveData();
+
+    const { modalityKey, teamName } = playerInfo;
+    await updateTeamMessage(interaction.guild, modalityKey, teamName);
+
+    const oldRoleText = oldRole ? (oldRole === 'C' ? 'Capitán' : 'Subcapitán') : 'Jugador';
+    const newRoleText = newRole ? (newRole === 'C' ? 'Capitán' : 'Subcapitán') : 'Jugador';
+
+    const logMessage = `🔄 **CAMBIO DE ROL:** El rol de ${targetUser.username} en **${teamName}** fue cambiado de **${oldRoleText}** a **${newRoleText}** por ${interaction.user.username}.`;
+    await logMovement(logMessage);
+
+    await interaction.reply({ content: `✅ El rol de ${targetUser.username} en **${teamName}** ha sido actualizado a **${newRoleText}**.`, ephemeral: true });
+}
+
+async function handleEquipoCommand(interaction) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+        return await interaction.reply({ content: '❌ No tienes permisos para gestionar equipos.', ephemeral: true });
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+    const nombre = interaction.options.getString('nombre');
+    const modalidad = interaction.options.getString('modalidad');
+    const modalityKey = modalidad.toLowerCase();
+
+    if (subcommand === 'crear') {
+        if (!ligaData[modalityKey]) {
+            return await interaction.reply({ content: `❌ La modalidad **${modalidad}** no existe.`, ephemeral: true });
+        }
+        if (ligaData[modalityKey].teams[nombre]) {
+            return await interaction.reply({ content: `❌ El equipo **${nombre}** ya existe en la modalidad **${modalidad}**.`, ephemeral: true });
+        }
+
+        ligaData[modalityKey].teams[nombre] = {
+            jugadores_habilitados: [],
+            articulos_usados: 0,
+            channel_id: null,
+            message_id: null
+        };
+        await saveData();
+        return await interaction.reply({ content: `✅ Equipo **${nombre}** creado con éxito en la modalidad **${modalidad}**.`, ephemeral: true });
+
+    } else if (subcommand === 'eliminar') {
+        if (!ligaData[modalityKey] || !ligaData[modalityKey].teams[nombre]) {
+            return await interaction.reply({ content: `❌ El equipo **${nombre}** no se encontró en la modalidad **${modalidad}**.`, ephemeral: true });
+        }
+
+        const confirmationId = `delete_${modalityKey}_${nombre}`;
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`confirm_${confirmationId}`)
+                    .setLabel('Confirmar Eliminación')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`cancel_${confirmationId}`)
+                    .setLabel('Cancelar')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+        return await interaction.reply({
+            content: `**¿Estás seguro de que quieres eliminar el equipo ${nombre} de la modalidad ${modalidad}?**\nEsta acción no se puede deshacer.`,
+            components: [row],
+            ephemeral: true
+        });
+    }
+}
+
+async function handleRestablecerPlantillaCommand(interaction) {
+    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+        return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
+    }
+
+    const modalidad = interaction.options.getString('modalidad');
+    const equipo = interaction.options.getString('equipo');
+
+    const modalityKey = modalidad.toLowerCase();
+    const teamData = ligaData[modalityKey]?.teams[equipo];
+
+    if (!teamData) {
+        return await interaction.reply({ content: `❌ No se encontró el equipo **${equipo}** en la modalidad **${modalidad}**.`, ephemeral: true });
+    }
+
+    const confirmationId = `reset_${modalityKey}_${equipo}`;
+
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`confirm_${confirmationId}`)
+                .setLabel('Confirmar Restablecimiento')
+                .setEmoji('⚠️')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId(`cancel_${confirmationId}`)
+                .setLabel('Cancelar')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+    await interaction.reply({
+        content: `**¿Estás seguro de que quieres restablecer la plantilla de ${equipo}?**\nEsta acción eliminará a **TODOS** los jugadores y reiniciará los artículos. No se puede deshacer.`,
+        components: [row],
+        ephemeral: true
+    });
 }
 
 async function handlePublicSigningResponse(interaction, accepted, signingId) {
@@ -368,6 +678,15 @@ async function notifyPlayerDismissal(guild, targetUser, requester, motivo, equip
     await dismissalsChannel.send({ embeds: [embed] });
 }
 
+async function logMovement(logMessage) {
+    if (!logWebhook) return; // No hacer nada si no está configurado
+    try {
+        await logWebhook.send(logMessage);
+    } catch (error) {
+        console.error(`❌ Error al enviar al webhook de logs:`, error);
+    }
+}
+
 async function handleAdminConfirmation(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
         return await interaction.reply({ content: '❌ No tienes permisos.', ephemeral: true });
@@ -391,8 +710,8 @@ async function handleAdminConfirmation(interaction) {
     if (teamData.jugadores_habilitados.length >= leagueData.max_players) {
         return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${teamName} ya tiene ${leagueData.max_players} jugadores.`, ephemeral: true });
     }
-    if (signingData.tipo === 'art' && teamData.articulos_usados >= 4) {
-        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${teamName} ya usó sus 4 artículos.`, ephemeral: true });
+    if (signingData.tipo === 'art' && teamData.articulos_usados >= config.ARTICLES_LIMIT) {
+        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${teamName} ya usó sus ${config.ARTICLES_LIMIT} artículos.`, ephemeral: true });
     }
 
     if (signingData.tipo === 'art') {
@@ -403,6 +722,9 @@ async function handleAdminConfirmation(interaction) {
 
     await updateTeamMessage(interaction.guild, modalityKey, teamName);
     await removePendingSigning(signingId);
+
+    const logMessage = `✅ **FICHAJE:** ${targetUser.username} se une a **${teamName}**. (Tipo: ${signingData.tipo}, Rol: ${signingData.rol || 'Jugador'}). Confirmado por ${interaction.user.username}.`;
+    await logMovement(logMessage);
 
     const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
         .setColor('#FFD700')
