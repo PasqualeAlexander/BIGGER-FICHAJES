@@ -6,49 +6,143 @@
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
       },
       "Equipo 2": {
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
       },
       "Equipo 3": {
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
       },
       "Equipo 4": {
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
       },
       "Equipo 5": {
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
       },
       "Equipo 6": {
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
       },
       "Equipo 7": {
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
       },
       "Equipo 8": {
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
+      },
+      "Parma": {
+        "jugadores_habilitados": [
+          {
+            "id": "290141452418285568",
+            "name": "pasqualealexander",
+            "rol": null
+          },
+          {
+            "id": "308769785381126145",
+            "name": "escalantejoaquin",
+            "rol": null
+          },
+          {
+            "id": "1234323792210296964",
+            "name": "tomimrl",
+            "rol": null
+          },
+          {
+            "id": "934753919081533440",
+            "name": "dxigbw9tihrhc3rlcybnb29ki",
+            "rol": null
+          },
+          {
+            "id": "1267324513981567066",
+            "name": "_sicq",
+            "rol": null
+          },
+          {
+            "id": "1015813248458698833",
+            "name": "agusssadorno",
+            "rol": null
+          },
+          {
+            "id": "927883624068562954",
+            "name": "who.is.herrera",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 1,
+        "channel_id": null,
+        "message_id": null,
+        "fichajes_libres_usados": 0
+      },
+      "Deportivo Defensa": {
+        "jugadores_habilitados": [
+          {
+            "id": "290141452418285568",
+            "name": "pasqualealexander",
+            "rol": null
+          },
+          {
+            "id": "308769785381126145",
+            "name": "escalantejoaquin",
+            "rol": null
+          },
+          {
+            "id": "1234323792210296964",
+            "name": "tomimrl",
+            "rol": null
+          },
+          {
+            "id": "934753919081533440",
+            "name": "dxigbw9tihrhc3rlcybnb29ki",
+            "rol": null
+          },
+          {
+            "id": "1267324513981567066",
+            "name": "_sicq",
+            "rol": null
+          },
+          {
+            "id": "1015813248458698833",
+            "name": "agusssadorno",
+            "rol": null
+          },
+          {
+            "id": "927883624068562954",
+            "name": "who.is.herrera",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 1,
+        "channel_id": null,
+        "message_id": null,
+        "fichajes_libres_usados": 0
       }
     }
   },
@@ -59,18 +153,427 @@
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
       },
       "Equipo B": {
         "channel_id": null,
         "message_id": null,
         "articulos_usados": 0,
-        "jugadores_habilitados": []
+        "jugadores_habilitados": [],
+        "fichajes_libres_usados": 0
+      },
+      "Parma": {
+        "jugadores_habilitados": [
+          {
+            "id": "934911201794727966",
+            "name": "emmanuel7880",
+            "rol": "C"
+          },
+          {
+            "id": "1234323792210296964",
+            "name": "tomimrl",
+            "rol": null
+          },
+          {
+            "id": "784126702502674442",
+            "name": "ezqx__",
+            "rol": null
+          },
+          {
+            "id": "541141794910633984",
+            "name": "geers0nn",
+            "rol": null
+          },
+          {
+            "id": "290141452418285568",
+            "name": "pasqualealexander",
+            "rol": null
+          },
+          {
+            "id": "707444254905073674",
+            "name": "ezeqthrs",
+            "rol": null
+          },
+          {
+            "id": "1267324513981567066",
+            "name": "_sicq",
+            "rol": null
+          },
+          {
+            "id": "1238952604575469659",
+            "name": "meszi15",
+            "rol": null
+          },
+          {
+            "id": "540738994930188298",
+            "name": "joszzze.",
+            "rol": null
+          },
+          {
+            "id": "400732913395695617",
+            "name": "temonio",
+            "rol": null
+          },
+          {
+            "id": "308769785381126145",
+            "name": "escalantejoaquin",
+            "rol": null
+          },
+          {
+            "id": "1389000474379944088",
+            "name": "sxdddddddddddd",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 0,
+        "channel_id": "1419464234546364416",
+        "message_id": "1426668827365609472",
+        "fichajes_libres_usados": 0
       }
     }
   },
   "bigger_x7": {
     "max_players": 20,
-    "teams": {}
+    "teams": {
+      "ALTO VUELO": {
+        "jugadores_habilitados": [
+          {
+            "id": "805161639254687764",
+            "name": "fonenis",
+            "rol": "C"
+          },
+          {
+            "id": "1149371001709285376",
+            "name": "pity_2018",
+            "rol": "SC"
+          },
+          {
+            "id": "869005846032576563",
+            "name": "octtaa_",
+            "rol": null
+          },
+          {
+            "id": "270699660354519041",
+            "name": "pnd1251",
+            "rol": null
+          },
+          {
+            "id": "847638432942915615",
+            "name": "gabriel_villafane",
+            "rol": null
+          },
+          {
+            "id": "727349571285549068",
+            "name": "facuu348",
+            "rol": null
+          },
+          {
+            "id": "507250676007436310",
+            "name": "maurixdakaumatu",
+            "rol": null
+          },
+          {
+            "id": "823985344974159952",
+            "name": ".zek1ta",
+            "rol": null
+          },
+          {
+            "id": "1246994775182147676",
+            "name": "tcarii_",
+            "rol": null
+          },
+          {
+            "id": "1396616157082943599",
+            "name": "simonkapox17",
+            "rol": null
+          },
+          {
+            "id": "862449292924158002",
+            "name": "nene__________",
+            "rol": null
+          },
+          {
+            "id": "460479609775849482",
+            "name": "dr_banco",
+            "rol": null
+          },
+          {
+            "id": "1157835720879243305",
+            "name": "whevg",
+            "rol": null
+          },
+          {
+            "id": "1334741224246087722",
+            "name": "nicooooobj",
+            "rol": null
+          },
+          {
+            "id": "591483279018950666",
+            "name": "bludchit",
+            "rol": null
+          },
+          {
+            "id": "1255297689235488808",
+            "name": "eseba211",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 1,
+        "channel_id": "1414323495738933359",
+        "message_id": "1426672243244662847",
+        "fichajes_libres_usados": 0
+      },
+      "Parma": {
+        "jugadores_habilitados": [
+          {
+            "id": "934911201794727966",
+            "name": "emmanuel7880",
+            "rol": "C"
+          },
+          {
+            "id": "784126702502674442",
+            "name": "ezqx__",
+            "rol": "SC"
+          },
+          {
+            "id": "1389000474379944088",
+            "name": "sxdddddddddddd",
+            "rol": null
+          },
+          {
+            "id": "1267324513981567066",
+            "name": "_sicq",
+            "rol": null
+          },
+          {
+            "id": "452897319826882560",
+            "name": "la_bebeneta",
+            "rol": null
+          },
+          {
+            "id": "290141452418285568",
+            "name": "pasqualealexander",
+            "rol": null
+          },
+          {
+            "id": "982115166579728385",
+.
+            "name": "ariixl",
+            "rol": null
+          },
+          {
+            "id": "1308937376252297318",
+            "name": "kazzzzumi.",
+            "rol": null
+          },
+          {
+            "id": "593227828712177684",
+            "name": "elmalditojuan",
+            "rol": null
+          },
+          {
+            "id": "1234323792210296964",
+            "name": "tomimrl",
+            "rol": null
+          },
+          {
+            "id": "1238952604575469659",
+            "name": "meszi15",
+            "rol": null
+          },
+          {
+            "id": "541141794910633984",
+            "name": "geers0nn",
+            "rol": null
+          },
+          {
+            "id": "707444254905073674",
+            "name": "ezeqthrs",
+            "rol": null
+          },
+          {
+            "id": "1420239711317917737",
+            "name": "lgsooo",
+            "rol": null
+          },
+          {
+            "id": "901285419948339241",
+            "name": "tutuca6054",
+            "rol": null
+          },
+          {
+            "id": "308769785381126145",
+            "name": "escalantejoaquin",
+            "rol": null
+          },
+          {
+            "id": "1234323792210296964",
+            "name": "tomimrl",
+            "rol": null
+          },
+          {
+            "id": "748394837090369616",
+            "name": "ferro.hx",
+            "rol": null
+          },
+          {
+            "id": "927883624068562954",
+            "name": "who.is.herrera",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 2,
+        "channel_id": "1414321896203223132",
+        "message_id": "1426673000995881090",
+        "fichajes_libres_usados": 0
+      },
+      "v707": {
+        "jugadores_habilitados": [
+          {
+            "id": "545006215210467341",
+            "name": "eldaboss.1",
+            "rol": null
+          },
+          {
+            "id": "1052374033737465936",
+            "name": "elpajaroo",
+            "rol": null
+          },
+          {
+            "id": "355184663544987650",
+            "name": "lushe",
+            "rol": null
+          },
+          {
+            "id": "1320411556759994370",
+            "name": "unlimited0175",
+            "rol": null
+          },
+          {
+            "id": "1090695749823631422",
+            "name": "nedved_0596",
+            "rol": null
+          },
+          {
+            "id": "339957908437598251",
+            "name": "lukkav",
+            "rol": null
+          },
+          {
+            "id": "1127224472492068874",
+            "name": "jahskajsjakshkajskdjakskdjaksjd",
+            "rol": null
+          },
+          {
+            "id": "1422655799079079977",
+            "name": "aspass01",
+            "rol": null
+          },
+          {
+            "id": "584234397830742017",
+            "name": "bolsa9948",
+            "rol": null
+          },
+          {
+            "id": "1241587542034354307",
+            "name": "elpanafranco_97744",
+            "rol": null
+          },
+          {
+            "id": "826913363195985932",
+            "name": "vorterix02",
+            "rol": null
+          },
+          {
+            "id": "994993668492644402",
+            "name": "gennaro_xd2881",
+            "rol": null
+          },
+          {
+            "id": "1302546205187903491",
+            "name": "juanprbs",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 1,
+        "channel_id": null,
+        "message_id": null,
+        "fichajes_libres_usados": 0
+      },
+      "Voltaje 707": {
+        "jugadores_habilitados": [
+          {
+            "id": "545006215210467341",
+            "name": "eldaboss.1",
+            "rol": null
+          },
+          {
+            "id": "1052374033737465936",
+            "name": "elpajaroo",
+            "rol": null
+          },
+          {
+            "id": "355184663544987650",
+            "name": "lushe",
+            "rol": null
+          },
+          {
+            "id": "1320411556759994370",
+            "name": "unlimited0175",
+            "rol": null
+          },
+          {
+            "id": "1090695749823631422",
+            "name": "nedved_0596",
+            "rol": null
+          },
+          {
+            "id": "339957908437598251",
+            "name": "lukkav",
+            "rol": null
+          },
+          {
+            "id": "1127224472492068874",
+            "name": "jahskajsjakshkajskdjakskdjaksjd",
+            "rol": null
+          },
+          {
+            "id": "1422655799079079977",
+            "name": "aspass01",
+            "rol": null
+          },
+          {
+            "id": "584234397830742017",
+            "name": "bolsa9948",
+            "rol": null
+          },
+          {
+            "id": "1241587542034354307",
+            "name": "elpanafranco_97744",
+            "rol": null
+          },
+          {
+            "id": "826913363195985932",
+            "name": "vorterix02",
+            "rol": null
+          },
+          {
+            "id": "994993668492644402",
+            "name": "gennaro_xd2881",
+            "rol": null
+          },
+          {
+            "id": "1302546205187903491",
+            "name": "juanprbs",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 1,
+        "channel_id": "1414321631366615171",
+        "message_id": "1426676354614689894",
+        "fichajes_libres_usados": 0
+      }
+    }
   }
 }

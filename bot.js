@@ -279,6 +279,7 @@ client.on('interactionCreate', async interaction => {
                 if (teamData) {
                     teamData.jugadores_habilitados = [];
                     teamData.articulos_usados = 0;
+                    teamData.fichajes_libres_usados = 0;
                     await saveData();
                     await updateTeamMessage(interaction.guild, modalityKey, equipo);
 
@@ -422,7 +423,10 @@ async function handleBajarCommand(interaction) {
 
     const modalityKey = equipoInfoBaja.modalidad.toLowerCase();
     const teamName = equipoInfoBaja.equipo;
-    const teamData = ligaData[modalityKey]?.teams[teamName];
+
+    const teams = ligaData[modalityKey]?.teams;
+    const foundTeamName = teams ? Object.keys(teams).find(name => name.toLowerCase() === teamName.toLowerCase()) : undefined;
+    const teamData = foundTeamName ? teams[foundTeamName] : undefined;
 
     if (!teamData) {
         return await interaction.reply({ content: `❌ No se encontró el equipo "${teamName}".`, ephemeral: true });
@@ -430,19 +434,20 @@ async function handleBajarCommand(interaction) {
 
     const playerIndex = teamData.jugadores_habilitados.findIndex(p => p.id === targetUser.id);
     if (playerIndex === -1) {
-        return await interaction.reply({ content: `❌ ${targetUser.username} no está en ${teamName}.`, ephemeral: true });
+        return await interaction.reply({ content: `❌ ${targetUser.username} no está en ${foundTeamName}.`, ephemeral: true });
     }
 
     teamData.jugadores_habilitados.splice(playerIndex, 1);
     saveData();
 
-    await notifyPlayerDismissal(interaction.guild, targetUser, requester, motivo, equipoInfoBaja);
-    await updateTeamMessage(interaction.guild, modalityKey, teamName);
+    const updatedEquipoInfo = { equipo: foundTeamName, modalidad: equipoInfoBaja.modalidad };
+    await notifyPlayerDismissal(interaction.guild, targetUser, requester, motivo, updatedEquipoInfo);
+    await updateTeamMessage(interaction.guild, modalityKey, foundTeamName);
 
-    const logMessage = `📉 **BAJA:** ${targetUser.username} ha sido bajado de **${teamName}** por ${requester.username}. Motivo: ${motivo || 'No especificado'}`;
+    const logMessage = `📉 **BAJA:** ${targetUser.username} ha sido bajado de **${foundTeamName}** por ${requester.username}. Motivo: ${motivo || 'No especificado'}`;
     await logMovement(logMessage);
 
-    await interaction.reply({ content: `✅ ${targetUser.username} ha sido bajado de ${teamName}.`, ephemeral: true });
+    await interaction.reply({ content: `✅ ${targetUser.username} ha sido bajado de ${foundTeamName}.`, ephemeral: true });
 }
 
 async function handleCancelarCommand(interaction) {
@@ -521,13 +526,15 @@ async function handlePlantillaCommand(interaction) {
     const teamName = interaction.options.getString('equipo');
     const modalityKey = modality.toLowerCase();
 
-    const teamData = ligaData[modalityKey]?.teams[teamName];
+    const teams = ligaData[modalityKey]?.teams;
+    const foundTeamName = teams ? Object.keys(teams).find(name => name.toLowerCase() === teamName.toLowerCase()) : undefined;
+    const teamData = foundTeamName ? teams[foundTeamName] : undefined;
 
     if (!teamData) {
         return await interaction.reply({ content: `❌ No se encontró el equipo **${teamName}** en la modalidad **${modality}**.`, ephemeral: true });
     }
 
-    const embed = await buildTeamEmbed(modalityKey, teamName);
+    const embed = await buildTeamEmbed(modalityKey, foundTeamName);
     await interaction.reply({ embeds: [embed], ephemeral: true });
 }
 
@@ -540,41 +547,42 @@ async function handleRolCommand(interaction) {
     const newRoleValue = interaction.options.getString('rol');
     const newRole = newRoleValue === 'null' ? null : newRoleValue;
 
-    let playerInfo = null;
-    let playerToUpdate = null;
+    // Obtener el contexto del canal actual
+    const { equipo, modalidad } = extractTeamAndModality(interaction);
+    const modalityKey = modalidad.toLowerCase();
+    const teamNameFromChannel = equipo;
 
-    // Buscar al jugador
-    for (const modalityKey in ligaData) {
-        for (const teamName in ligaData[modalityKey].teams) {
-            const team = ligaData[modalityKey].teams[teamName];
-            const playerFound = team.jugadores_habilitados.find(p => p.id === targetUser.id);
-            if (playerFound) {
-                playerInfo = { modalityKey, teamName };
-                playerToUpdate = playerFound;
-                break;
-            }
-        }
-        if (playerInfo) break;
+    // Buscar el equipo de forma insensible a mayúsculas y minúsculas dentro de la modalidad actual
+    const teams = ligaData[modalityKey]?.teams;
+    const foundTeamName = teams ? Object.keys(teams).find(name => name.toLowerCase() === teamNameFromChannel.toLowerCase()) : undefined;
+    const teamData = foundTeamName ? teams[foundTeamName] : undefined;
+
+    if (!teamData) {
+        return await interaction.reply({ content: `❌ No se pudo determinar el equipo desde este canal, o el equipo \"${teamNameFromChannel}\" no existe en la modalidad ${modalidad}.`, ephemeral: true });
     }
 
-    if (!playerInfo) {
-        return await interaction.reply({ content: `❌ ${targetUser.username} no está registrado en ningún equipo.`, ephemeral: true });
+    // Buscar al jugador dentro de ese equipo específico
+    const playerToUpdate = teamData.jugadores_habilitados.find(p => p.id === targetUser.id);
+
+    if (!playerToUpdate) {
+        return await interaction.reply({ content: `❌ ${targetUser.username} no está en el equipo **${foundTeamName}**.`, ephemeral: true });
     }
 
+    // Aplicar el cambio de rol
     const oldRole = playerToUpdate.rol;
     playerToUpdate.rol = newRole;
-    saveData();
+    await saveData();
 
-    const { modalityKey, teamName } = playerInfo;
-    await updateTeamMessage(interaction.guild, modalityKey, teamName);
+    // Actualizar mensaje y registrar el cambio
+    await updateTeamMessage(interaction.guild, modalityKey, foundTeamName);
 
     const oldRoleText = oldRole ? (oldRole === 'C' ? 'Capitán' : 'Subcapitán') : 'Jugador';
     const newRoleText = newRole ? (newRole === 'C' ? 'Capitán' : 'Subcapitán') : 'Jugador';
 
-    const logMessage = `🔄 **CAMBIO DE ROL:** El rol de ${targetUser.username} en **${teamName}** fue cambiado de **${oldRoleText}** a **${newRoleText}** por ${interaction.user.username}.`;
+    const logMessage = `🔄 **CAMBIO DE ROL:** El rol de ${targetUser.username} en **${foundTeamName}** fue cambiado de **${oldRoleText}** a **${newRoleText}** por ${interaction.user.username}.`;
     await logMovement(logMessage);
 
-    await interaction.reply({ content: `✅ El rol de ${targetUser.username} en **${teamName}** ha sido actualizado a **${newRoleText}**.`, ephemeral: true });
+    await interaction.reply({ content: `✅ El rol de ${targetUser.username} en **${foundTeamName}** ha sido actualizado a **${newRoleText}**.`, ephemeral: true });
 }
 
 async function handleEquipoCommand(interaction) {
@@ -598,6 +606,7 @@ async function handleEquipoCommand(interaction) {
         ligaData[modalityKey].teams[nombre] = {
             jugadores_habilitados: [],
             articulos_usados: 0,
+            fichajes_libres_usados: 0,
             channel_id: null,
             message_id: null
         };
@@ -678,11 +687,13 @@ async function handleSincronizarPlantillaCommand(interaction) {
     const articulos = interaction.options.getInteger('articulos');
 
     const modalityKey = modalidad.toLowerCase();
-    const teamData = ligaData[modalityKey]?.teams[equipo];
+    const teams = ligaData[modalityKey]?.teams;
+    const foundTeamName = teams ? Object.keys(teams).find(name => name.toLowerCase() === equipo.toLowerCase()) : undefined;
 
-    if (!teamData) {
+    if (!foundTeamName) {
         return await interaction.reply({ content: `❌ No se encontró el equipo **${equipo}** en la modalidad **${modalidad}**.`, ephemeral: true });
     }
+    const teamData = teams[foundTeamName];
 
     // Extraer IDs de las menciones
     const mentionRegex = /<@!?(\d+)>/g;
@@ -694,7 +705,7 @@ async function handleSincronizarPlantillaCommand(interaction) {
     }
 
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply();
 
         const newPlayerList = [];
         for (const id of playerIds) {
@@ -713,9 +724,10 @@ async function handleSincronizarPlantillaCommand(interaction) {
         }
 
         await saveData();
-        await updateTeamMessage(interaction.guild, modalityKey, equipo);
+        await updateTeamMessage(interaction.guild, modalityKey, foundTeamName);
 
-        await interaction.editReply({ content: `✅ Plantilla de **${equipo}** sincronizada con éxito con ${newPlayerList.length} jugadores.` });
+        const embed = await buildTeamEmbed(modalityKey, foundTeamName);
+        await interaction.editReply({ content: `✅ Plantilla de **${foundTeamName}** sincronizada con éxito con ${newPlayerList.length} jugadores.`, embeds: [embed] });
 
     } catch (error) {
         console.error('❌ Error sincronizando la plantilla:', error);
@@ -822,28 +834,37 @@ async function handleAdminConfirmation(interaction) {
     const modalityKey = signingData.modalidad.toLowerCase();
     const teamName = signingData.equipo;
     const leagueData = ligaData[modalityKey];
-    const teamData = leagueData?.teams[teamName];
+    
+    const teams = leagueData?.teams;
+    const foundTeamName = teams ? Object.keys(teams).find(name => name.toLowerCase() === teamName.toLowerCase()) : undefined;
+    const teamData = foundTeamName ? teams[foundTeamName] : undefined;
 
     if (!teamData) {
         return await interaction.reply({ content: `❌ Error: No se encontró el equipo "${teamName}".`, ephemeral: true });
     }
     if (teamData.jugadores_habilitados.length >= leagueData.max_players) {
-        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${teamName} ya tiene ${leagueData.max_players} jugadores.`, ephemeral: true });
+        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${foundTeamName} ya tiene ${leagueData.max_players} jugadores.`, ephemeral: true });
     }
     if (signingData.tipo === 'art' && teamData.articulos_usados >= config.ARTICLES_LIMIT) {
-        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${teamName} ya usó sus ${config.ARTICLES_LIMIT} artículos.`, ephemeral: true });
+        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${foundTeamName} ya usó sus ${config.ARTICLES_LIMIT} artículos.`, ephemeral: true });
     }
+    if (signingData.tipo === 'libre' && teamData.fichajes_libres_usados >= config.FREE_SIGNINGS_LIMIT) {{
+        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${foundTeamName} ya usó sus ${config.FREE_SIGNINGS_LIMIT} fichajes libres.`, ephemeral: true }});
+    }}
 
     if (signingData.tipo === 'art') {
         teamData.articulos_usados++;
     }
+    if (signingData.tipo === 'libre') {{
+        teamData.fichajes_libres_usados++;
+    }}
     teamData.jugadores_habilitados.push({ id: targetUser.id, name: targetUser.username, rol: signingData.rol });
     saveData();
 
-    await updateTeamMessage(interaction.guild, modalityKey, teamName);
+    await updateTeamMessage(interaction.guild, modalityKey, foundTeamName);
     await removePendingSigning(signingId);
 
-    const logMessage = `✅ **FICHAJE:** ${targetUser.username} se une a **${teamName}**. (Tipo: ${signingData.tipo}, Rol: ${signingData.rol || 'Jugador'}). Confirmado por ${interaction.user.username}.`;
+    const logMessage = `✅ **FICHAJE:** ${targetUser.username} se une a **${foundTeamName}**. (Tipo: ${signingData.tipo}, Rol: ${signingData.rol || 'Jugador'}). Confirmado por ${interaction.user.username}.`;
     await logMovement(logMessage);
 
     const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
@@ -862,20 +883,23 @@ async function handleEstablecerPlantillaCommand(interaction) {
     const { equipo, modalidad } = extractTeamAndModality(interaction);
     const modalityKey = modalidad.toLowerCase();
     const teamName = equipo;
-    const teamData = ligaData[modalityKey]?.teams[teamName];
+
+    const teams = ligaData[modalityKey]?.teams;
+    const foundTeamName = teams ? Object.keys(teams).find(name => name.toLowerCase() === teamName.toLowerCase()) : undefined;
+    const teamData = foundTeamName ? teams[foundTeamName] : undefined;
 
     if (!teamData) {
         return await interaction.reply({ content: `❌ No se encontró el equipo "${teamName}".`, ephemeral: true });
     }
 
-    const embed = await buildTeamEmbed(modalityKey, teamName);
+    const embed = await buildTeamEmbed(modalityKey, foundTeamName);
     const message = await interaction.channel.send({ embeds: [embed] });
 
     teamData.channel_id = message.channel.id;
     teamData.message_id = message.id;
     saveData();
 
-    await interaction.reply({ content: `✅ Mensaje de plantilla establecido para ${teamName}.`, ephemeral: true });
+    await interaction.reply({ content: `✅ Mensaje de plantilla establecido para ${foundTeamName}.`, ephemeral: true });
 }
 
 async function buildTeamEmbed(modalityKey, teamName) {
@@ -887,7 +911,7 @@ async function buildTeamEmbed(modalityKey, teamName) {
     }).join('\n') || '*Sin jugadores fichados*';
 
     const description = `# HABILITADOS\n\n${playerList}\n\n` +
-                        `**${teamData.jugadores_habilitados.length}/${leagueData.max_players} - ${teamData.articulos_usados}/4 <:ART:1380746252513317015>**\n` +
+                        `**${teamData.jugadores_habilitados.length}/${leagueData.max_players} | Libres: ${teamData.fichajes_libres_usados}/${config.FREE_SIGNINGS_LIMIT} | <:ART:1380746252513317015>: ${teamData.articulos_usados}/${config.ARTICLES_LIMIT}**\n` +
                         `-# Desvirtuar = aislamiento`;
 
     return new EmbedBuilder()
