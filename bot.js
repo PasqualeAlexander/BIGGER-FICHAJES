@@ -187,6 +187,31 @@ async function registerCommands() {
                                                         .setDescription('El equipo a restablecer')
                                                         .setRequired(true)
                                                         .setAutocomplete(true)
+                                                ),
+                                            new SlashCommandBuilder()
+                                                .setName('sincronizar_plantilla')
+                                                .setDescription('Sincroniza manualmente una plantilla existente con una lista de jugadores.')
+                                                .addStringOption(option =>
+                                                    option.setName('modalidad')
+                                                        .setDescription('La modalidad del equipo a sincronizar')
+                                                        .setRequired(true)
+                                                        .setAutocomplete(true)
+                                                )
+                                                .addStringOption(option =>
+                                                    option.setName('equipo')
+                                                        .setDescription('El equipo a sincronizar')
+                                                        .setRequired(true)
+                                                        .setAutocomplete(true)
+                                                )
+                                                .addStringOption(option =>
+                                                    option.setName('jugadores')
+                                                        .setDescription('Lista de menciones (@jugador) de toda la plantilla')
+                                                        .setRequired(true)
+                                                )
+                                                .addIntegerOption(option =>
+                                                    option.setName('articulos')
+                                                        .setDescription('Número de artículos usados (opcional)')
+                                                        .setRequired(false)
                                                 )
                                         ];    try {
         console.log('🆕 REGISTRANDO comandos SOLO en el servidor principal...');
@@ -224,6 +249,8 @@ client.on('interactionCreate', async interaction => {
                 await handleEquipoCommand(interaction);
             } else if (interaction.commandName === 'restablecer_plantilla') {
                 await handleRestablecerPlantillaCommand(interaction);
+            } else if (interaction.commandName === 'sincronizar_plantilla') {
+                await handleSincronizarPlantillaCommand(interaction);
             }
         } catch (error) {
             console.error('❌ Error procesando interacción de comando:', error);
@@ -637,6 +664,62 @@ async function handleRestablecerPlantillaCommand(interaction) {
         components: [row],
         ephemeral: true
     });
+}
+
+async function handleSincronizarPlantillaCommand(interaction) {
+    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+        return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
+    }
+
+    const modalidad = interaction.options.getString('modalidad');
+    const equipo = interaction.options.getString('equipo');
+    const jugadoresString = interaction.options.getString('jugadores');
+    const articulos = interaction.options.getInteger('articulos');
+
+    const modalityKey = modalidad.toLowerCase();
+    const teamData = ligaData[modalityKey]?.teams[equipo];
+
+    if (!teamData) {
+        return await interaction.reply({ content: `❌ No se encontró el equipo **${equipo}** en la modalidad **${modalidad}**.`, ephemeral: true });
+    }
+
+    // Extraer IDs de las menciones
+    const mentionRegex = /<@!?(\d+)>/g;
+    const matches = jugadoresString.matchAll(mentionRegex);
+    const playerIds = [...matches].map(match => match[1]);
+
+    if (playerIds.length === 0) {
+        return await interaction.reply({ content: '❌ No se encontraron menciones de jugadores válidas en el texto proporcionado.', ephemeral: true });
+    }
+
+    try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const newPlayerList = [];
+        for (const id of playerIds) {
+            try {
+                const user = await client.users.fetch(id);
+                newPlayerList.push({ id: user.id, name: user.username, rol: null });
+            } catch (error) {
+                console.warn(`No se pudo encontrar al usuario con ID ${id}. Saltando...`);
+            }
+        }
+
+        // Actualizar datos
+        teamData.jugadores_habilitados = newPlayerList;
+        if (articulos !== null && articulos >= 0) {
+            teamData.articulos_usados = articulos;
+        }
+
+        await saveData();
+        await updateTeamMessage(interaction.guild, modalityKey, equipo);
+
+        await interaction.editReply({ content: `✅ Plantilla de **${equipo}** sincronizada con éxito con ${newPlayerList.length} jugadores.` });
+
+    } catch (error) {
+        console.error('❌ Error sincronizando la plantilla:', error);
+        await interaction.editReply({ content: 'Ocurrió un error al procesar tu solicitud.' });
+    }
 }
 
 async function handlePublicSigningResponse(interaction, accepted, signingId) {
