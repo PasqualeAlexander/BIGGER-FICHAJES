@@ -1,3 +1,6 @@
+const fs = require('fs');
+let marketState = require('./market_state.json');
+
 const { Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, WebhookClient } = require('discord.js');
 const {
     ligaData,
@@ -213,7 +216,20 @@ async function registerCommands() {
                                                     option.setName('articulos')
                                                         .setDescription('Número de artículos usados (opcional)')
                                                         .setRequired(false)
-                                                )
+                                                ),
+        new SlashCommandBuilder()
+            .setName('mercado')
+            .setDescription('Gestiona el estado del mercado de fichajes')
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName('abrir')
+                    .setDescription('Abre el mercado de fichajes libres')
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName('cerrar')
+                    .setDescription('Cierra el mercado de fichajes libres')
+            )
                                         ];    try {
         console.log('🆕 REGISTRANDO comandos SOLO en el servidor principal...');
         const mainGuild = client.guilds.cache.get('1210830619228119090'); // LNB
@@ -252,6 +268,8 @@ client.on('interactionCreate', async interaction => {
                 await handleRestablecerPlantillaCommand(interaction);
             } else if (interaction.commandName === 'sincronizar_plantilla') {
                 await handleSincronizarPlantillaCommand(interaction);
+            } else if (interaction.commandName === 'mercado') {
+                await handleMercadoCommand(interaction);
             }
         } catch (error) {
             console.error('❌ Error procesando interacción de comando:', error);
@@ -735,6 +753,23 @@ async function handleSincronizarPlantillaCommand(interaction) {
     }
 }
 
+async function handleMercadoCommand(interaction) {
+    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+        return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+    if (subcommand === 'abrir') {
+        marketState.is_market_open = true;
+        fs.writeFileSync('./market_state.json', JSON.stringify(marketState));
+        await interaction.reply({ content: '✅ El mercado de fichajes libres ha sido abierto.', ephemeral: true });
+    } else if (subcommand === 'cerrar') {
+        marketState.is_market_open = false;
+        fs.writeFileSync('./market_state.json', JSON.stringify(marketState));
+        await interaction.reply({ content: '❌ El mercado de fichajes libres ha sido cerrado.', ephemeral: true });
+    }
+}
+
 async function handlePublicSigningResponse(interaction, accepted, signingId) {
     const signingData = pendingSignings.get(signingId);
     if (!signingData || interaction.user.id !== signingData.targetUserId) {
@@ -848,16 +883,19 @@ async function handleAdminConfirmation(interaction) {
     if (signingData.tipo === 'art' && teamData.articulos_usados >= config.ARTICLES_LIMIT) {
         return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${foundTeamName} ya usó sus ${config.ARTICLES_LIMIT} artículos.`, ephemeral: true });
     }
-    if (signingData.tipo === 'libre' && teamData.fichajes_libres_usados >= config.FREE_SIGNINGS_LIMIT) {{
-        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${foundTeamName} ya usó sus ${config.FREE_SIGNINGS_LIMIT} fichajes libres.`, ephemeral: true }});
-    }}
+    if (signingData.tipo === 'libre' && !marketState.is_market_open) {
+        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El mercado de fichajes libres está cerrado.`, ephemeral: true });
+    }
+    if (signingData.tipo === 'libre' && teamData.fichajes_libres_usados >= config.FREE_SIGNINGS_LIMIT) {
+        return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${foundTeamName} ya usó sus ${config.FREE_SIGNINGS_LIMIT} fichajes libres.`, ephemeral: true });
+    }
 
     if (signingData.tipo === 'art') {
         teamData.articulos_usados++;
     }
-    if (signingData.tipo === 'libre') {{
+    if (signingData.tipo === 'libre') {
         teamData.fichajes_libres_usados++;
-    }}
+    }
     teamData.jugadores_habilitados.push({ id: targetUser.id, name: targetUser.username, rol: signingData.rol });
     saveData();
 
