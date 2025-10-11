@@ -32,6 +32,7 @@ console.log('🔑 Token configurado:', config.TOKEN ? config.TOKEN.substring(0, 
 console.log('📢 Canal de fichajes:', config.SIGNINGS_CHANNEL_ID || 'NO CONFIGURADO');
 console.log('📉 Canal de bajas:', config.DISMISSALS_CHANNEL_ID || 'NO CONFIGURADO');
 console.log('👥 Roles admin:', config.ADMIN_ROLE_IDS ? config.ADMIN_ROLE_IDS.length : 0);
+console.log('🔑 ID de Rol para Restablecer (Moderador):', config.RESET_ROLE_ID || 'NO CONFIGURADO');
 
 const client = new Client({
     intents: [
