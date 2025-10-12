@@ -767,6 +767,42 @@ async function handleRestablecerPlantillaCommand(interaction) {
     });
 }
 
+async function handleSincronizarPlantillaCommand(interaction) {
+    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+        return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
+    }
+
+    const modalidad = interaction.options.getString('modalidad');
+    const equipo = interaction.options.getString('equipo');
+    const jugadoresRaw = interaction.options.getString('jugadores');
+    const articulos = interaction.options.getInteger('articulos') || 0; // Default to 0 if not provided
+
+    const modalityKey = modalidad.toLowerCase();
+    const teamData = ligaData[modalityKey]?.teams[equipo];
+
+    if (!teamData) {
+        return await interaction.reply({ content: `❌ No se encontró el equipo **${equipo}** en la modalidad **${modalidad}**.`, ephemeral: true });
+    }
+
+    // Parse players from the raw string (e.g., "@player1 @player2")
+    const playerMentions = jugadoresRaw.match(/<@!?(\d+)>/g);
+    if (!playerMentions || playerMentions.length === 0) {
+        return await interaction.reply({ content: '❌ No se encontraron jugadores válidos en la lista proporcionada.', ephemeral: true });
+    }
+
+    const newPlayers = playerMentions.map(mention => {
+        const id = mention.replace(/<@!?/, '').replace(/>/, '');
+        // Attempt to get username from guild members cache or fetch
+        const member = interaction.guild.members.cache.get(id);
+        const name = member ? member.user.username : `Unknown User (${id})`;
+        return { id, name, rol: null }; // Default role to null
+    });
+
+    teamData.jugadores_habilitados = newPlayers;
+    teamData.articulos_usados = articulos; // Set articles used directly
+    await saveData();
+    await updateTeamMessage(interaction.guild, modalityKey, equipo);
+
     await interaction.reply({ content: `✅ Plantilla de **${equipo}** sincronizada con éxito. Jugadores: ${teamData.jugadores_habilitados.length}. Artículos usados: ${teamData.articulos_usados}.`, ephemeral: true });
 }
 
@@ -787,11 +823,11 @@ async function handleOtorgarArticulosCommand(interaction) {
     }
 
     // Since articulos_usados tracks used articles, granting more means reducing the 'used' count.
-    teamData.articulos_usados = Math.max(0, teamData.articulos_usados - cantidad);
-    await saveData();
-
-    await interaction.reply({ content: `✅ Se han otorgado **${cantidad}** artículos adicionales al equipo **${equipo}** en la modalidad **${modalidad}**. Artículos usados ahora: ${teamData.articulos_usados}.`, ephemeral: true });
-}
+            teamData.articulos_usados = Math.max(0, teamData.articulos_usados - cantidad);
+            await saveData();
+            await updateTeamMessage(interaction.guild, modalityKey, equipo);
+    
+            await interaction.reply({ content: `✅ Se han otorgado **${cantidad}** artículos adicionales al equipo **${equipo}** en la modalidad **${modalidad}**. Artículos usados ahora: ${teamData.articulos_usados}.`, ephemeral: true });}
 
 async function handleIniciarTemporadaCommand(interaction) {
     if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
