@@ -12,6 +12,29 @@ const {
     removePendingSigning
 } = require('./dataManager.js');
 
+// Initialize marketState for any new modalities in ligaData
+let marketStateUpdated = false;
+if (!marketState.modalities) {
+    marketState.modalities = {};
+    marketStateUpdated = true;
+}
+
+for (const modalityKey in ligaData) {
+    if (!marketState.modalities[modalityKey]) {
+        marketState.modalities[modalityKey] = {
+            season_state: 'PRETEMPORADA',
+            mid_season_free_signings_used: 0,
+            season_start_date: new Date().toISOString().split('T')[0]
+        };
+        marketStateUpdated = true;
+    }
+}
+
+if (marketStateUpdated) {
+    fs.writeFileSync('./market_state.json', JSON.stringify(marketState, null, 2));
+    console.log('✅ market_state.json actualizado con nuevas modalidades.');
+}
+
 let config;
 try {
     config = require('./config.json');
@@ -215,6 +238,27 @@ async function registerCommands() {
                                                         .setDescription('Número de artículos usados (opcional)')
                                                         .setRequired(false)
                                                 ),
+                                            new SlashCommandBuilder()
+                                                .setName('otorgar_articulos')
+                                                .setDescription('Otorga artículos adicionales a un equipo.')
+                                                .addStringOption(option =>
+                                                    option.setName('modalidad')
+                                                        .setDescription('La modalidad del equipo')
+                                                        .setRequired(true)
+                                                        .setAutocomplete(true)
+                                                )
+                                                .addStringOption(option =>
+                                                    option.setName('equipo')
+                                                        .setDescription('El equipo al que otorgar artículos')
+                                                        .setRequired(true)
+                                                        .setAutocomplete(true)
+                                                )
+                                                .addIntegerOption(option =>
+                                                    option.setName('cantidad')
+                                                        .setDescription('La cantidad de artículos a otorgar (número positivo)')
+                                                        .setRequired(true)
+                                                        .setMinValue(1)
+                                                ),
         new SlashCommandBuilder()
             .setName('mercado')
             .setDescription('Gestiona el estado del mercado de fichajes (abrir/cerrar en temporada regular)')
@@ -222,11 +266,23 @@ async function registerCommands() {
                 subcommand
                     .setName('abrir')
                     .setDescription('Abre el mercado de fichajes libres (5 fichajes) durante la temporada regular')
+                    .addStringOption(option =>
+                        option.setName('modalidad')
+                            .setDescription('La modalidad para la que se gestiona el mercado')
+                            .setRequired(true)
+                            .setAutocomplete(true)
+                    )
             )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName('cerrar')
                     .setDescription('Cierra el mercado de fichajes libres durante la temporada regular')
+                    .addStringOption(option =>
+                        option.setName('modalidad')
+                            .setDescription('La modalidad para la que se gestiona el mercado')
+                            .setRequired(true)
+                            .setAutocomplete(true)
+                    )
             ),
         new SlashCommandBuilder()
             .setName('iniciar_temporada')
@@ -284,6 +340,8 @@ client.on('interactionCreate', async interaction => {
                 await handleRestablecerPlantillaCommand(interaction);
             } else if (interaction.commandName === 'sincronizar_plantilla') {
                 await handleSincronizarPlantillaCommand(interaction);
+            } else if (interaction.commandName === 'otorgar_articulos') {
+                await handleOtorgarArticulosCommand(interaction);
             } else if (interaction.commandName === 'mercado') {
                 await handleMercadoCommand(interaction);
             } else if (interaction.commandName === 'iniciar_temporada') {
@@ -709,63 +767,30 @@ async function handleRestablecerPlantillaCommand(interaction) {
     });
 }
 
-async function handleSincronizarPlantillaCommand(interaction) {
+    await interaction.reply({ content: `✅ Plantilla de **${equipo}** sincronizada con éxito. Jugadores: ${teamData.jugadores_habilitados.length}. Artículos usados: ${teamData.articulos_usados}.`, ephemeral: true });
+}
+
+async function handleOtorgarArticulosCommand(interaction) {
     if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
         return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
     }
 
     const modalidad = interaction.options.getString('modalidad');
     const equipo = interaction.options.getString('equipo');
-    const jugadoresString = interaction.options.getString('jugadores');
-    const articulos = interaction.options.getInteger('articulos');
+    const cantidad = interaction.options.getInteger('cantidad');
 
     const modalityKey = modalidad.toLowerCase();
-    const teams = ligaData[modalityKey]?.teams;
-    const foundTeamName = teams ? Object.keys(teams).find(name => name.toLowerCase() === equipo.toLowerCase()) : undefined;
+    const teamData = ligaData[modalityKey]?.teams[equipo];
 
-    if (!foundTeamName) {
+    if (!teamData) {
         return await interaction.reply({ content: `❌ No se encontró el equipo **${equipo}** en la modalidad **${modalidad}**.`, ephemeral: true });
     }
-    const teamData = teams[foundTeamName];
 
-    // Extraer IDs de las menciones
-    const mentionRegex = /<@!?(\d+)>/g;
-    const matches = jugadoresString.matchAll(mentionRegex);
-    const playerIds = [...matches].map(match => match[1]);
+    // Since articulos_usados tracks used articles, granting more means reducing the 'used' count.
+    teamData.articulos_usados = Math.max(0, teamData.articulos_usados - cantidad);
+    await saveData();
 
-    if (playerIds.length === 0) {
-        return await interaction.reply({ content: '❌ No se encontraron menciones de jugadores válidas en el texto proporcionado.', ephemeral: true });
-    }
-
-    try {
-        await interaction.deferReply();
-
-        const newPlayerList = [];
-        for (const id of playerIds) {
-            try {
-                const user = await client.users.fetch(id);
-                newPlayerList.push({ id: user.id, name: user.username, rol: null });
-            } catch (error) {
-                console.warn(`No se pudo encontrar al usuario con ID ${id}. Saltando...`);
-            }
-        }
-
-        // Actualizar datos
-        teamData.jugadores_habilitados = newPlayerList;
-        if (articulos !== null && articulos >= 0) {
-            teamData.articulos_usados = articulos;
-        }
-
-        await saveData();
-        await updateTeamMessage(interaction.guild, modalityKey, foundTeamName);
-
-        const embed = await buildTeamEmbed(modalityKey, foundTeamName);
-        await interaction.editReply({ content: `✅ Plantilla de **${foundTeamName}** sincronizada con éxito con ${newPlayerList.length} jugadores.`, embeds: [embed] });
-
-    } catch (error) {
-        console.error('❌ Error sincronizando la plantilla:', error);
-        await interaction.editReply({ content: 'Ocurrió un error al procesar tu solicitud.' });
-    }
+    await interaction.reply({ content: `✅ Se han otorgado **${cantidad}** artículos adicionales al equipo **${equipo}** en la modalidad **${modalidad}**. Artículos usados ahora: ${teamData.articulos_usados}.`, ephemeral: true });
 }
 
 async function handleIniciarTemporadaCommand(interaction) {
@@ -780,9 +805,19 @@ async function handleIniciarTemporadaCommand(interaction) {
     if (!ligaData[modalityKey]) {
         return await interaction.reply({ content: `❌ La modalidad **${modality}** no existe.`, ephemeral: true });
     }
+    
+    if (!marketState.modalities[modalityKey]) {
+        marketState.modalities[modalityKey] = {
+            season_state: 'TEMPORADA_REGULAR_MERCADO_CERRADO',
+            mid_season_free_signings_used: 0,
+            season_start_date: new Date().toISOString().split('T')[0]
+        };
+    } else {
+        marketState.modalities[modalityKey].season_state = 'TEMPORADA_REGULAR_MERCADO_CERRADO';
+        marketState.modalities[modalityKey].mid_season_free_signings_used = 0;
+        marketState.modalities[modalityKey].season_start_date = new Date().toISOString().split('T')[0];
+    }
 
-    marketState.season_state = 'TEMPORADA_REGULAR_MERCADO_CERRADO';
-    marketState.mid_season_free_signings_used = 0;
     fs.writeFileSync('./market_state.json', JSON.stringify(marketState, null, 2));
 
     await interaction.reply({ content: `✅ Temporada iniciada para la modalidad **${modality}**. El mercado libre está cerrado y los contadores de fichajes libres de mitad de temporada han sido reiniciados.`, ephemeral: true });
@@ -801,8 +836,18 @@ async function handleFinalizarTemporadaCommand(interaction) {
         return await interaction.reply({ content: `❌ La modalidad **${modality}** no existe.`, ephemeral: true });
     }
 
-    marketState.season_state = 'PRETEMPORADA';
-    marketState.mid_season_free_signings_used = 0; // Reset for next season
+    if (!marketState.modalities[modalityKey]) {
+        marketState.modalities[modalityKey] = {
+            season_state: 'PRETEMPORADA',
+            mid_season_free_signings_used: 0,
+            season_start_date: new Date().toISOString().split('T')[0]
+        };
+    } else {
+        marketState.modalities[modalityKey].season_state = 'PRETEMPORADA';
+        marketState.modalities[modalityKey].mid_season_free_signings_used = 0; // Reset for next season
+        marketState.modalities[modalityKey].season_start_date = new Date().toISOString().split('T')[0];
+    }
+
     fs.writeFileSync('./market_state.json', JSON.stringify(marketState, null, 2));
 
     await interaction.reply({ content: `✅ Temporada finalizada para la modalidad **${modality}**. El mercado libre ilimitado (pretemporada) ha sido abierto.`, ephemeral: true });
@@ -814,14 +859,35 @@ async function handleMercadoCommand(interaction) {
     }
 
     const subcommand = interaction.options.getSubcommand();
+        const modality = interaction.options.getString('modalidad');
+    
+        if (!modality) {
+          await interaction.reply({ content: 'Por favor, especifica una modalidad (vender o comprar).', ephemeral: true });
+          return;
+        }
+    
+            const modalityKey = modality.toLowerCase();
+        
+            // Check if modality exists in ligaData
+            if (!ligaData[modalityKey]) {
+                return await interaction.reply({ content: `❌ La modalidad **${modality}** no existe.`, ephemeral: true });
+            }
+    if (!marketState.modalities[modalityKey]) {
+        marketState.modalities[modalityKey] = {
+            season_state: 'TEMPORADA_REGULAR_MERCADO_CERRADO',
+            mid_season_free_signings_used: 0,
+            season_start_date: new Date().toISOString().split('T')[0]
+        };
+    }
+
     if (subcommand === 'abrir') {
-        marketState.season_state = 'TEMPORADA_REGULAR_MERCADO_ABIERTO';
+        marketState.modalities[modalityKey].season_state = 'TEMPORADA_REGULAR_MERCADO_ABIERTO';
         fs.writeFileSync('./market_state.json', JSON.stringify(marketState, null, 2));
-        await interaction.reply({ content: '✅ El mercado de fichajes libres ha sido abierto para la temporada regular (5 fichajes).', ephemeral: true });
+        await interaction.reply({ content: `✅ El mercado de fichajes libres ha sido abierto para la modalidad **${modality}** (5 fichajes).`, ephemeral: true });
     } else if (subcommand === 'cerrar') {
-        marketState.season_state = 'TEMPORADA_REGULAR_MERCADO_CERRADO';
+        marketState.modalities[modalityKey].season_state = 'TEMPORADA_REGULAR_MERCADO_CERRADO';
         fs.writeFileSync('./market_state.json', JSON.stringify(marketState, null, 2));
-        await interaction.reply({ content: '❌ El mercado de fichajes libres ha sido cerrado para la temporada regular.', ephemeral: true });
+        await interaction.reply({ content: `❌ El mercado de fichajes libres ha sido cerrado para la modalidad **${modality}**.`, ephemeral: true });
     }
 }
 
@@ -900,7 +966,14 @@ async function notifyPlayerDismissal(guild, targetUser, requester, motivo, equip
     await dismissalsChannel.send({ embeds: [embed] });
 }
 
-async function logMovement(logMessage) {\n    if (!logWebhook) return; // No hacer nada si no está configurado\n    try {\n        await logWebhook.send(`\`\`\`${logMessage}\`\`\``); // Wrap message with triple backticks\n    } catch (error) {\n        console.error(`❌ Error al enviar al webhook de logs:`, error);\n    }\n}
+async function logMovement(logMessage) {
+    if (!logWebhook) return; // No hacer nada si no está configurado
+    try {
+          await logWebhook.send(`\`\`\`${logMessage}\`\`\``);
+    } catch (error) {
+        console.error(`❌ Error al enviar al webhook de logs:`, error);
+    }
+}
 
 async function handleAdminConfirmation(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
@@ -933,7 +1006,12 @@ async function handleAdminConfirmation(interaction) {
     let tipoEmojiDeterminado;
     let marketStateUpdated = false;
 
-    switch (marketState.season_state) {
+    const currentModalityMarketState = marketState.modalities[modalityKey];
+    if (!currentModalityMarketState) {
+        return await interaction.reply({ content: `❌ No se encontró el estado del mercado para la modalidad **${signingData.modalidad}**.`, ephemeral: true });
+    }
+
+    switch (currentModalityMarketState.season_state) {
         case 'PRETEMPORADA':
             tipoDeterminado = 'libre';
             tipoEmojiDeterminado = '✍️';
@@ -942,10 +1020,10 @@ async function handleAdminConfirmation(interaction) {
         case 'TEMPORADA_REGULAR_MERCADO_ABIERTO':
             tipoDeterminado = 'libre';
             tipoEmojiDeterminado = '✍️';
-            if (marketState.mid_season_free_signings_used >= config.MID_SEASON_FREE_SIGNINGS_LIMIT) { // Assuming a new config for this
-                return await interaction.reply({ content: `⚠️ **Fichaje no completado.** Ya se han usado los ${config.MID_SEASON_FREE_SIGNINGS_LIMIT} fichajes libres de mitad de temporada.`, ephemeral: true });
+            if (currentModalityMarketState.mid_season_free_signings_used >= config.MID_SEASON_FREE_SIGNINGS_LIMIT) { // Assuming a new config for this
+                return await interaction.reply({ content: `⚠️ **Fichaje no completado.** Ya se han usado los ${config.MID_SEASON_FREE_SIGNINGS_LIMIT} fichajes libres de mitad de temporada para la modalidad **${signingData.modalidad}**.`, ephemeral: true });
             }
-            marketState.mid_season_free_signings_used++;
+            currentModalityMarketState.mid_season_free_signings_used++;
             marketStateUpdated = true;
             break;
         case 'TEMPORADA_REGULAR_MERCADO_CERRADO':
