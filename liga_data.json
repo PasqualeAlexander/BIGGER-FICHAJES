@@ -805,6 +805,144 @@
         "fichajes_libres_usados": 0,
         "channel_id": "1421555396753227827",
         "message_id": "1426768921494814721"
+      },
+      "Los Vagos de la Esquina": {
+        "jugadores_habilitados": [
+          {
+            "id": "774734176435699713",
+            "name": "v.barcoo",
+            "rol": "C"
+          },
+          {
+            "id": "1284947942989365310",
+            "name": "gabomoretti111",
+            "rol": null
+          },
+          {
+            "id": "1203075267183251528",
+            "name": "anonrlc_",
+            "rol": null
+          },
+          {
+            "id": "606977915326038016",
+            "name": "casaisz",
+            "rol": null
+          },
+          {
+            "id": "1125228388613886082",
+            "name": "goonzk14",
+            "rol": null
+          },
+          {
+            "id": "1348155361504268390",
+            "name": "fantoche_o_35345",
+            "rol": null
+          },
+          {
+            "id": "1338038912647561217",
+            "name": "shyun1",
+            "rol": null
+          },
+          {
+            "id": "760210030699741294",
+            "name": "santiago815",
+            "rol": null
+          },
+          {
+            "id": "1135090482314235914",
+            "name": "gataseenamoran.32",
+            "rol": null
+          },
+          {
+            "id": "747427431412924446",
+            "name": "rixxyache",
+            "rol": null
+          },
+          {
+            "id": "1125803353201455194",
+            "name": "dylanb75",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 0,
+        "fichajes_libres_usados": 0,
+        "channel_id": "1413966128144715947",
+        "message_id": "1427542653993750608"
+      },
+      "A.C Dressrosa": {
+        "jugadores_habilitados": [
+          {
+            "id": "520831240811708416",
+            "name": "capitanbeto01",
+            "rol": "C"
+          },
+          {
+            "id": "1410398139835351061",
+            "name": "mateito03634",
+            "rol": "SC"
+          },
+          {
+            "id": "621142117586173952",
+            "name": "pokedrugs",
+            "rol": null
+          },
+          {
+            "id": "1338868811520147476",
+            "name": "lakakasoy",
+            "rol": null
+          },
+          {
+            "id": "1085882048838901760",
+            "name": "milanesa196",
+            "rol": null
+          },
+          {
+            "id": "721209783407083520",
+            "name": "matchampion1",
+            "rol": null
+          },
+          {
+            "id": "1265727711318638688",
+            "name": "virginius99",
+            "rol": null
+          },
+          {
+            "id": "655517847220387840",
+            "name": "lesxoq",
+            "rol": null
+          },
+          {
+            "id": "1346242682585878648",
+            "name": "franwh.",
+            "rol": null
+          },
+          {
+            "id": "1252075203765469304",
+            "name": "messi3049859",
+            "rol": null
+          },
+          {
+            "id": "1328259433679163432",
+            "name": "thisssissslau",
+            "rol": null
+          },
+          {
+            "id": "1246175967135797258",
+            "name": "ebere30",
+            "rol": null
+          }
+        ],
+        "articulos_usados": 0,
+        "fichajes_libres_usados": 0,
+        "channel_id": "1414326977464238090",
+        "message_id": "1427543452068872285"
+      },
+      "Voltaje 707": {
+        "jugadores_habilitados": [],
+        "articulos_usados": 0,
+        "fichajes_libres_usados": 0,
+        "channel_id": null,
+        "message_id": null
       }
     }
   },

@@ -325,17 +325,25 @@ async function registerCommands() {
                     .setRequired(true)
                     .setAutocomplete(true)
             ),
-        new SlashCommandBuilder()
-            .setName('finalizar_temporada')
-            .setDescription('Finaliza la temporada actual, abriendo el mercado libre ilimitado (pretemporada).')
-            .addStringOption(option =>
-                option.setName('modalidad')
-                    .setDescription('La modalidad para la que se finaliza la temporada')
-                    .setRequired(true)
-                    .setAutocomplete(true)
-            )
-                                        ];    try {
-        console.log('🆕 REGISTRANDO comandos SOLO en el servidor principal...');
+                                                    new SlashCommandBuilder()
+                                                        .setName('finalizar_temporada')
+                                                        .setDescription('Finaliza la temporada actual, abriendo el mercado libre ilimitado (pretemporada).')
+                                                        .addStringOption(option =>
+                                                            option.setName('modalidad')
+                                                                .setDescription('La modalidad para la que se finaliza la temporada')
+                                                                .setRequired(true)
+                                                                .setAutocomplete(true)
+                                                        ),
+                        new SlashCommandBuilder()
+                            .setName('help')
+                            .setDescription('Muestra la lista de comandos disponibles'),
+                        new SlashCommandBuilder()
+                            .setName('helpcapitan')
+                            .setDescription('Muestra la lista de comandos disponibles para capitanes'),
+                        new SlashCommandBuilder()
+                            .setName('actualizar_todas_planillas')
+                            .setDescription('Migra todas las plantillas existentes al nuevo formato de texto plano.'),
+                                                        ];    try {        console.log('🆕 REGISTRANDO comandos SOLO en el servidor principal...');
         const mainGuild = client.guilds.cache.get('1210830619228119090'); // LNB
         if (mainGuild) {
             await mainGuild.commands.set(commands);
@@ -380,6 +388,12 @@ client.on('interactionCreate', async interaction => {
                 await handleIniciarTemporadaCommand(interaction);
             } else if (interaction.commandName === 'finalizar_temporada') {
                 await handleFinalizarTemporadaCommand(interaction);
+            } else if (interaction.commandName === 'help') {
+                await handleHelpCommand(interaction);
+            } else if (interaction.commandName === 'helpcapitan') {
+                await handleHelpCapitanCommand(interaction);
+            } else if (interaction.commandName === 'actualizar_todas_planillas') {
+                await handleActualizarTodasPlanillasCommand(interaction);
             }
         } catch (error) {
             console.error('❌ Error procesando interacción de comando:', error);
@@ -657,7 +671,7 @@ async function handlePlantillaCommand(interaction) {
         return await interaction.reply({ content: `❌ No se encontró el equipo **${teamName}** en la modalidad **${modality}**.`, ephemeral: true });
     }
 
-    const embed = await buildTeamEmbed(modalityKey, foundTeamName);
+    const embed = await buildTeamEmbed(interaction.guild, modalityKey, foundTeamName);
     await interaction.reply({ embeds: [embed], ephemeral: true });
 }
 
@@ -921,6 +935,47 @@ async function handleFinalizarTemporadaCommand(interaction) {
     await interaction.reply({ content: `✅ Temporada finalizada para la modalidad **${modality}**. El mercado libre ilimitado (pretemporada) ha sido abierto.`, ephemeral: true });
 }
 
+async function handleHelpCommand(interaction) {
+    const embed = new EmbedBuilder()
+        .setColor('#0099ff')
+        .setTitle('Comandos del Bot de Fichajes')
+        .setDescription('Aquí tienes una lista de los comandos que puedes usar:')
+        .addFields(
+            { name: '/fichar <jugador> [rol]', value: 'Enviar una solicitud de fichaje a un jugador. (Solo capitanes o autorizados)' },
+            { name: '/bajar <jugador> [motivo]', value: 'Bajar a un jugador de tu equipo. (Solo capitanes o autorizados)' },
+            { name: '/cancelar [motivo]', value: 'Darte de baja de tu equipo actual.' },
+            { name: '/info <jugador>', value: 'Muestra la información de un jugador (equipo, modalidad, rol).' },
+            { name: '/plantilla <modalidad> <equipo>', value: 'Muestra la plantilla de un equipo específico.' },
+            { name: '/rol <jugador> <rol>', value: 'Modifica el rol de un jugador en tu plantilla. (Solo capitanes o autorizados)' },
+            { name: '/establecer_plantilla', value: 'Crea el mensaje de plantilla en este canal. (Solo Admin/Mod)' },
+            { name: '/equipo crear/eliminar <nombre> <modalidad>', value: 'Crea o elimina un equipo en una modalidad. (Solo Admin/Mod)' },
+            { name: '/restablecer_plantilla <modalidad> <equipo>', value: 'Elimina TODOS los jugadores de una plantilla. (Solo Admin/Mod)' },
+            { name: '/sincronizar_plantilla <modalidad> <equipo> <jugadores>', value: 'Sincroniza la plantilla con una lista de jugadores. (Solo Admin/Mod)' },
+            { name: '/otorgar_articulos <modalidad> <equipo> <cantidad>', value: 'Otorga artículos a un equipo. (Solo Admin/Mod)' },
+            { name: '/mercado abrir/cerrar <modalidad>', value: 'Abre o cierra el mercado de fichajes. (Solo Admin/Mod)' },
+            { name: '/iniciar_temporada <modalidad>', value: 'Inicia una nueva temporada. (Solo Admin/Mod)' },
+            { name: '/finalizar_temporada <modalidad>', value: 'Finaliza la temporada actual. (Solo Admin/Mod)' },
+            { name: '/help', value: 'Muestra esta lista de comandos.' }
+        );
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+async function handleHelpCapitanCommand(interaction) {
+    const embed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('Comandos para Capitanes')
+        .setDescription('Estos son los comandos que puedes usar como capitán:')
+        .addFields(
+            { name: '/fichar <jugador> [rol]', value: 'Enviar una solicitud de fichaje a un jugador.' },
+            { name: '/bajar <jugador> [motivo]', value: 'Bajar a un jugador de tu equipo.' },
+            { name: '/rol <jugador> <rol>', value: 'Modifica el rol de un jugador en tu plantilla.' },
+            { name: '/cancelar [motivo]', value: 'Darte de baja de tu equipo actual.' }
+        );
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
 async function handleMercadoCommand(interaction) {
     if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
@@ -1073,6 +1128,7 @@ async function handleAdminConfirmation(interaction) {
     let tipoDeterminado;
     let tipoEmojiDeterminado;
     let marketStateUpdated = false;
+    let signing_type;
 
     const currentModalityMarketState = marketState.modalities[modalityKey];
     if (!currentModalityMarketState) {
@@ -1083,11 +1139,13 @@ async function handleAdminConfirmation(interaction) {
         case 'PRETEMPORADA':
             tipoDeterminado = 'libre';
             tipoEmojiDeterminado = '✍️';
+            signing_type = 'pretemporada';
             // No hay límite de fichajes libres en pretemporada, solo el límite de plantilla
             break;
         case 'TEMPORADA_REGULAR_MERCADO_ABIERTO':
             tipoDeterminado = 'libre';
             tipoEmojiDeterminado = '✍️';
+            signing_type = 'libre_mitad_temporada';
             if (currentModalityMarketState.mid_season_free_signings_used >= config.MID_SEASON_FREE_SIGNINGS_LIMIT) { // Assuming a new config for this
                 return await interaction.reply({ content: `⚠️ **Fichaje no completado.** Ya se han usado los ${config.MID_SEASON_FREE_SIGNINGS_LIMIT} fichajes libres de mitad de temporada para la modalidad **${signingData.modalidad}**.`, ephemeral: true });
             }
@@ -1097,6 +1155,7 @@ async function handleAdminConfirmation(interaction) {
         case 'TEMPORADA_REGULAR_MERCADO_CERRADO':
             tipoDeterminado = 'art';
             tipoEmojiDeterminado = '<:ART:1380746252513317015>';
+            signing_type = 'art';
             if (teamData.articulos_usados >= config.ARTICLES_LIMIT) {
                 return await interaction.reply({ content: `⚠️ **Fichaje no completado.** El equipo ${foundTeamName} ya usó sus ${config.ARTICLES_LIMIT} artículos.`, ephemeral: true });
             }
@@ -1113,7 +1172,7 @@ async function handleAdminConfirmation(interaction) {
         // For TEMPORADA_REGULAR_MERCADO_ABIERTO, the global counter is used
     }
     
-    teamData.jugadores_habilitados.push({ id: targetUser.id, name: targetUser.username, rol: signingData.rol });
+    teamData.jugadores_habilitados.push({ id: targetUser.id, name: targetUser.username, rol: signingData.rol, fichaje: signing_type });
     saveData(); // Save ligaData
 
     if (marketStateUpdated) {
@@ -1134,6 +1193,41 @@ async function handleAdminConfirmation(interaction) {
     await interaction.update({ embeds: [updatedEmbed], components: [] });
 }
 
+async function handleActualizarTodasPlanillasCommand(interaction) {
+    if (!isModerator(interaction.member)) {
+        return await interaction.reply({ content: '❌ Solo los Moderadores pueden ejecutar este comando.', ephemeral: true });
+    }
+
+    await interaction.reply({ content: '⏳ Migrando todas las plantillas al nuevo formato... Esto puede tardar un momento.', ephemeral: true });
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    const guild = interaction.guild;
+
+    for (const modalityKey in ligaData) {
+        for (const teamName in ligaData[modalityKey].teams) {
+            const teamData = ligaData[modalityKey].teams[teamName];
+            if (teamData.channel_id && teamData.message_id) {
+                try {
+                    const channel = await guild.channels.fetch(teamData.channel_id);
+                    const message = await channel.messages.fetch(teamData.message_id);
+                    const messageContent = await buildTeamPlainText(guild, modalityKey, teamName);
+                    await message.edit({ content: messageContent, embeds: [] });
+                    successCount++;
+                    // Small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    console.error(`❌ Error al actualizar plantilla de ${teamName} (${modalityKey}):`, error);
+                    errorCount++;
+                }
+            }
+        }
+    }
+
+    await interaction.followUp({ content: `✅ Migración completada. ${successCount} plantillas actualizadas. ${errorCount} errores.`, ephemeral: true });
+}
+
 async function handleEstablecerPlantillaCommand(interaction) {
     if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ No tienes permisos.', ephemeral: true });
@@ -1151,8 +1245,8 @@ async function handleEstablecerPlantillaCommand(interaction) {
         return await interaction.reply({ content: `❌ No se encontró el equipo "${teamName}".`, ephemeral: true });
     }
 
-    const embed = await buildTeamEmbed(modalityKey, foundTeamName);
-    const message = await interaction.channel.send({ embeds: [embed] });
+    const messageContent = await buildTeamPlainText(interaction.guild, modalityKey, foundTeamName);
+    const message = await interaction.channel.send({ content: messageContent });
 
     teamData.channel_id = message.channel.id;
     teamData.message_id = message.id;
@@ -1161,12 +1255,82 @@ async function handleEstablecerPlantillaCommand(interaction) {
     await interaction.reply({ content: `✅ Mensaje de plantilla establecido para ${foundTeamName}.`, ephemeral: true });
 }
 
-async function buildTeamEmbed(modalityKey, teamName) {
+async function buildTeamPlainText(guild, modalityKey, teamName) {
     const leagueData = ligaData[modalityKey];
     const teamData = leagueData.teams[teamName];
-    const playerList = teamData.jugadores_habilitados.map((player, index) => {
-        let roleTag = player.rol ? (player.rol === 'C' ? ' (C)' : ' SC') : '';
-        return `${index + 1}. <@${player.id}>${roleTag}`;
+
+    if (teamData.jugadores_habilitados.length > 0) {
+        try {
+            await guild.members.fetch({ user: teamData.jugadores_habilitados.map(p => p.id) });
+        } catch (err) {
+            console.error("Error fetching members for plain text message:", err);
+        }
+    }
+
+    // Sort players by role
+    const roleOrder = { 'C': 1, 'SC': 2 };
+    const sortedPlayers = [...teamData.jugadores_habilitados].sort((a, b) => {
+        const roleA = roleOrder[a.rol] || 3;
+        const roleB = roleOrder[b.rol] || 3;
+        return roleA - roleB;
+    });
+
+    const playerList = sortedPlayers.map((player, index) => {
+        const member = guild.members.cache.get(player.id);
+        const displayName = member ? member.user.username : player.name;
+        let roleTag = player.rol ? (player.rol === 'C' ? ' (C)' : ' (SC)') : '';
+        
+        let signingEmoji = '';
+        if (player.fichaje === 'art') {
+            signingEmoji = ' <:ART:1380746252513317015>';
+        } else if (player.fichaje === 'libre_mitad_temporada') {
+            signingEmoji = ' ✍️';
+        }
+
+        return `${index + 1}. <@${player.id}> (${displayName})${roleTag}${signingEmoji}`;
+    }).join('\n') || '*Sin jugadores fichados*';
+
+    const title = `**HABILITADOS DE ${teamName.toUpperCase()}**`;
+    const header = `# HABILITADOS`;
+    const stats = `**${teamData.jugadores_habilitados.length}/${leagueData.max_players} | <:ART:1380746252513317015>: ${teamData.articulos_usados}/${config.ARTICLES_LIMIT}**`;
+    const footer = `-# Desvirtuar = aislamiento`;
+
+    return `${title}\n\n${header}\n\n${playerList}\n\n${stats}\n${footer}`;
+}
+
+async function buildTeamEmbed(guild, modalityKey, teamName) {
+    const leagueData = ligaData[modalityKey];
+    const teamData = leagueData.teams[teamName];
+
+    if (teamData.jugadores_habilitados.length > 0) {
+        try {
+            await guild.members.fetch({ user: teamData.jugadores_habilitados.map(p => p.id) });
+        } catch (err) {
+            console.error("Error fetching members for embed:", err);
+        }
+    }
+
+    // Sort players by role
+    const roleOrder = { 'C': 1, 'SC': 2 };
+    const sortedPlayers = [...teamData.jugadores_habilitados].sort((a, b) => {
+        const roleA = roleOrder[a.rol] || 3;
+        const roleB = roleOrder[b.rol] || 3;
+        return roleA - roleB;
+    });
+
+    const playerList = sortedPlayers.map((player, index) => {
+        const member = guild.members.cache.get(player.id);
+        const displayName = member ? member.user.username : player.name;
+        let roleTag = player.rol ? (player.rol === 'C' ? ' (C)' : ' (SC)') : '';
+
+        let signingEmoji = '';
+        if (player.fichaje === 'art') {
+            signingEmoji = ' <:ART:1380746252513317015>';
+        } else if (player.fichaje === 'libre_mitad_temporada') {
+            signingEmoji = ' ✍️';
+        }
+
+        return `${index + 1}. <@${player.id}> (${displayName})${roleTag}${signingEmoji}`;
     }).join('\n') || '*Sin jugadores fichados*';
 
     const description = `# HABILITADOS\n\n${playerList}\n\n` +
@@ -1189,8 +1353,8 @@ async function updateTeamMessage(guild, modalityKey, teamName) {
     try {
         const channel = await guild.channels.fetch(teamData.channel_id);
         const message = await channel.messages.fetch(teamData.message_id);
-        const embed = await buildTeamEmbed(modalityKey, teamName);
-        await message.edit({ embeds: [embed] });
+        const messageContent = await buildTeamPlainText(guild, modalityKey, teamName);
+        await message.edit({ content: messageContent, embeds: [] });
         console.log(`✅ Plantilla de ${teamName} actualizada.`);
     } catch (error) {
         console.error(`❌ Error al actualizar plantilla de ${teamName}:`, error);
