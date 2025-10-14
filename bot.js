@@ -90,6 +90,38 @@ function extractTeamAndModality(interaction) {
     return { equipo, modalidad };
 }
 
+function isModerator(member) {
+    return member.roles.cache.has(config.RESET_ROLE_ID);
+}
+
+function isAdmin(member) {
+    return member.permissions.has(PermissionFlagsBits.Administrator) || config.ADMIN_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
+}
+
+function isAuthorized(interaction) {
+    return isAdmin(interaction.member) || isModerator(interaction.member);
+}
+
+function isCaptain(interaction) {
+    const { equipo, modalidad } = extractTeamAndModality(interaction);
+    const modalityKey = modalidad.toLowerCase();
+    const teamName = equipo;
+
+    if (!ligaData[modalityKey] || !ligaData[modalityKey].teams[teamName]) {
+        return false;
+    }
+
+    const teamData = ligaData[modalityKey].teams[teamName];
+    const player = teamData.jugadores_habilitados.find(p => p.id === interaction.user.id);
+
+    return player && player.rol === 'C';
+}
+
+function isCaptainOrAuthorized(interaction) {
+    return isCaptain(interaction) || isAuthorized(interaction);
+}
+
+
 client.once('ready', async () => {
     console.log(`✅ Bot conectado exitosamente como ${client.user.tag}`);
     await loadPendingSignings();
@@ -365,7 +397,7 @@ client.on('interactionCreate', async interaction => {
                 await handleAdminConfirmation(interaction);
 
             } else if (customId.startsWith('confirm_reset_')) {
-                if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+                if (!isAuthorized(interaction)) {
                     return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden confirmar esta acción.', ephemeral: true });
                 }
                 
@@ -391,7 +423,7 @@ client.on('interactionCreate', async interaction => {
                 }
 
             } else if (customId.startsWith('cancel_reset_')) {
-                if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+                if (!isAuthorized(interaction)) {
                     return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden cancelar esta acción.', ephemeral: true });
                 }
                 await interaction.update({
@@ -399,7 +431,7 @@ client.on('interactionCreate', async interaction => {
                     components: []
                 });
             } else if (customId.startsWith('confirm_delete_')) {
-                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+                if (!isAuthorized(interaction)) {
                     return await interaction.reply({ content: '❌ No tienes permisos para confirmar esta acción.', ephemeral: true });
                 }
 
@@ -418,7 +450,7 @@ client.on('interactionCreate', async interaction => {
                     });
                 }
             } else if (customId.startsWith('cancel_delete_')) {
-                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+                if (!isAuthorized(interaction)) {
                     return await interaction.reply({ content: '❌ No tienes permisos para cancelar esta acción.', ephemeral: true });
                 }
                 await interaction.update({
@@ -470,7 +502,7 @@ async function handleFicharCommand(interaction) {
     if (targetUser.id === requester.id && rol !== 'C' && rol !== 'SC') {
         return await interaction.reply({ content: '❌ Solo puedes ficharte a ti mismo para asignarte el rol de Capitán o Subcapitán.', ephemeral: true });
     }
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+    if (!isCaptainOrAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ No tienes permisos para fichar.', ephemeral: true });
     }
 
@@ -508,7 +540,7 @@ async function handleBajarCommand(interaction) {
     const requester = interaction.user;
     const equipoInfoBaja = extractTeamAndModality(interaction);
 
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+    if (!isCaptainOrAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ No tienes permisos para bajar jugadores.', ephemeral: true });
     }
 
@@ -630,7 +662,7 @@ async function handlePlantillaCommand(interaction) {
 }
 
 async function handleRolCommand(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+    if (!isCaptainOrAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ No tienes permisos para usar este comando.', ephemeral: true });
     }
 
@@ -677,7 +709,7 @@ async function handleRolCommand(interaction) {
 }
 
 async function handleEquipoCommand(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ No tienes permisos para gestionar equipos.', ephemeral: true });
     }
 
@@ -731,7 +763,7 @@ async function handleEquipoCommand(interaction) {
 }
 
 async function handleRestablecerPlantillaCommand(interaction) {
-    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
     }
 
@@ -768,7 +800,7 @@ async function handleRestablecerPlantillaCommand(interaction) {
 }
 
 async function handleSincronizarPlantillaCommand(interaction) {
-    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
     }
 
@@ -807,7 +839,7 @@ async function handleSincronizarPlantillaCommand(interaction) {
 }
 
 async function handleOtorgarArticulosCommand(interaction) {
-    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
     }
 
@@ -830,7 +862,7 @@ async function handleOtorgarArticulosCommand(interaction) {
             await interaction.reply({ content: `✅ Se han otorgado **${cantidad}** artículos adicionales al equipo **${equipo}** en la modalidad **${modalidad}**. Artículos usados ahora: ${teamData.articulos_usados}.`, ephemeral: true });}
 
 async function handleIniciarTemporadaCommand(interaction) {
-    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
     }
 
@@ -860,7 +892,7 @@ async function handleIniciarTemporadaCommand(interaction) {
 }
 
 async function handleFinalizarTemporadaCommand(interaction) {
-    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
     }
 
@@ -890,7 +922,7 @@ async function handleFinalizarTemporadaCommand(interaction) {
 }
 
 async function handleMercadoCommand(interaction) {
-    if (!interaction.member.roles.cache.has(config.RESET_ROLE_ID)) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ Solo los usuarios con el rol de Moderador pueden usar este comando.', ephemeral: true });
     }
 
@@ -1012,7 +1044,7 @@ async function logMovement(logMessage) {
 }
 
 async function handleAdminConfirmation(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ No tienes permisos.', ephemeral: true });
     }
 
@@ -1103,7 +1135,7 @@ async function handleAdminConfirmation(interaction) {
 }
 
 async function handleEstablecerPlantillaCommand(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !config.ADMIN_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId))) {
+    if (!isAuthorized(interaction)) {
         return await interaction.reply({ content: '❌ No tienes permisos.', ephemeral: true });
     }
 
