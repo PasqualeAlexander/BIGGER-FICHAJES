@@ -1,5 +1,6 @@
 const fs = require('fs');
 let marketState = require('./market_state.json');
+let pendingDeletions = new Map();
 
 const { Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, WebhookClient } = require('discord.js');
 const {
@@ -74,6 +75,8 @@ console.log('⚙️ Cliente Discord creado');
 
 // --- Funciones Principales del Bot ---
 
+const MODALITY_REGEX = /.*equipos-(bigger[\w\d_]+)/i;
+
 function extractTeamAndModality(interaction) {
     const channelName = interaction.channel.name || '';
     const parentName = interaction.channel.parent?.name || '';
@@ -83,10 +86,17 @@ function extractTeamAndModality(interaction) {
     if (equipoMatch) {
         equipo = equipoMatch[1].trim();
     }
-    const modalidadMatch = parentName.match(/equipos-(bigger[\w\d]+)/i);
-    if (modalidadMatch) {
-        modalidad = modalidadMatch[1].toUpperCase();
+    
+    try {
+        const parentNameCleaned = parentName.replace(/^[^\w-]+/, ''); // Remove leading non-alphanumeric, non-hyphen characters
+        const modalidadMatch = parentNameCleaned.match(MODALITY_REGEX);
+        if (modalidadMatch) {
+            modalidad = modalidadMatch[1].toUpperCase().replace(/ /g, '_'); // Normalize to underscores
+        }
+    } catch (e) {
+        console.error('Regex match error:', e);
     }
+
     return { equipo, modalidad };
 }
 
@@ -119,6 +129,38 @@ function isCaptain(interaction) {
 
 function isCaptainOrAuthorized(interaction) {
     return isCaptain(interaction) || isAuthorized(interaction);
+}
+
+function isPlayerInAnyTeam(modalityKey, playerId) {
+    const teams = ligaData[modalityKey]?.teams;
+    if (!teams) {
+        return false;
+    }
+
+    for (const teamName in teams) {
+        const team = teams[teamName];
+        if (team.jugadores_habilitados.some(p => p.id === playerId)) {
+            return true; 
+        }
+    }
+
+    return false; 
+}
+
+function getPlayerTeam(modalityKey, playerId) {
+    const teams = ligaData[modalityKey]?.teams;
+    if (!teams) {
+        return null;
+    }
+
+    for (const teamName in teams) {
+        const team = teams[teamName];
+        if (team.jugadores_habilitados.some(p => p.id === playerId)) {
+            return teamName; 
+        }
+    }
+
+    return null;
 }
 
 
@@ -218,14 +260,14 @@ async function registerCommands() {
                                                         .setName('eliminar')
                                                         .setDescription('Elimina un equipo existente de una modalidad')
                                                         .addStringOption(option =>
-                                                            option.setName('nombre')
-                                                                .setDescription('El nombre del equipo a eliminar')
+                                                            option.setName('modalidad')
+                                                                .setDescription('La modalidad de la que se eliminará el equipo')
                                                                 .setRequired(true)
                                                                 .setAutocomplete(true)
                                                         )
                                                         .addStringOption(option =>
-                                                            option.setName('modalidad')
-                                                                .setDescription('La modalidad de la que se eliminará el equipo')
+                                                            option.setName('nombre')
+                                                                .setDescription('El nombre del equipo a eliminar')
                                                                 .setRequired(true)
                                                                 .setAutocomplete(true)
                                                         )
@@ -263,7 +305,7 @@ async function registerCommands() {
                                                 .addStringOption(option =>
                                                     option.setName('jugadores')
                                                         .setDescription('Lista de menciones (@jugador) de toda la plantilla')
-                                                        .setRequired(true)
+                                                        .setRequired(false)
                                                 )
                                                 .addIntegerOption(option =>
                                                     option.setName('articulos')
@@ -399,6 +441,8 @@ client.on('interactionCreate', async interaction => {
             console.error('❌ Error procesando interacción de comando:', error);
         }
     } else if (interaction.isButton()) {
+        await interaction.deferUpdate(); // Re-add deferUpdate
+        console.log('✅ Botón de interacción recibido:', interaction.customId);
         try {
             const customId = interaction.customId;
 
@@ -449,28 +493,35 @@ client.on('interactionCreate', async interaction => {
                     return await interaction.reply({ content: '❌ No tienes permisos para confirmar esta acción.', ephemeral: true });
                 }
 
-                const [, , modalityKey, equipo] = customId.split('_');
-                if (ligaData[modalityKey]?.teams[equipo]) {
-                    delete ligaData[modalityKey].teams[equipo];
+                const deleteId = customId.replace('confirm_delete_', '');
+                const deletionData = pendingDeletions.get(deleteId);
+
+                if (!deletionData) {
+                    return await interaction.update({ content: '❌ Error: No se encontró la solicitud de eliminación.', components: [] });
+                }
+
+                const { modalityKey, nombre } = deletionData;
+
+                if (ligaData[modalityKey]?.teams[nombre]) {
+                    delete ligaData[modalityKey].teams[nombre];
                     await saveData();
-                    await interaction.update({
-                        content: `✅ El equipo **${equipo}** ha sido eliminado de la modalidad **${modalityKey.toUpperCase()}**.`,
-                        components: []
+                    await interaction.followUp({
+                        content: `✅ El equipo **${nombre}** ha sido eliminado de la modalidad **${modalityKey.toUpperCase()}** por ${interaction.user.username}.`,
+                        ephemeral: false
                     });
+                    await interaction.message.delete();
+                    pendingDeletions.delete(deleteId);
                 } else {
                     await interaction.update({
                         content: '❌ Error: No se pudo encontrar el equipo para eliminar.',
                         components: []
                     });
                 }
-            } else if (customId.startsWith('cancel_delete_')) {
-                if (!isAuthorized(interaction)) {
-                    return await interaction.reply({ content: '❌ No tienes permisos para cancelar esta acción.', ephemeral: true });
-                }
-                await interaction.update({
+                await interaction.followUp({
                     content: 'Operación cancelada.',
-                    components: []
+                    ephemeral: true
                 });
+                await interaction.message.delete();
             }
         } catch (error) {
             console.error('❌ Error procesando interacción de botón:', error);
@@ -521,6 +572,14 @@ async function handleFicharCommand(interaction) {
     }
 
     const equipoInfo = extractTeamAndModality(interaction);
+    const modalityKey = equipoInfo.modalidad.toLowerCase();
+
+    // Check if the player is already in a team in the same modality
+    if (isPlayerInAnyTeam(modalityKey, targetUser.id)) {
+        const teamName = getPlayerTeam(modalityKey, targetUser.id);
+        return await interaction.reply({ content: `❌ El jugador ${targetUser.username} ya se encuentra en el equipo **${teamName}** de esta modalidad.`, ephemeral: true });
+    }
+
     // tipo and tipoEmoji will be determined in handleAdminConfirmation based on market state
     const signingId = `${interaction.guild.id}_${targetUser.id}_${Date.now()}`;
 
@@ -755,23 +814,24 @@ async function handleEquipoCommand(interaction) {
             return await interaction.reply({ content: `❌ El equipo **${nombre}** no se encontró en la modalidad **${modalidad}**.`, ephemeral: true });
         }
 
-        const confirmationId = `delete_${modalityKey}_${nombre}`;
+        const deleteId = `${modalityKey}_${nombre}_${Date.now()}`;
+        pendingDeletions.set(deleteId, { modalityKey, nombre });
+
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`confirm_${confirmationId}`)
+                    .setCustomId(`confirm_delete_${deleteId}`)
                     .setLabel('Confirmar Eliminación')
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
-                    .setCustomId(`cancel_${confirmationId}`)
+                    .setCustomId(`cancel_delete_${deleteId}`)
                     .setLabel('Cancelar')
                     .setStyle(ButtonStyle.Secondary)
             );
 
         return await interaction.reply({
             content: `**¿Estás seguro de que quieres eliminar el equipo ${nombre} de la modalidad ${modalidad}?**\nEsta acción no se puede deshacer.`,
-            components: [row],
-            ephemeral: true
+            components: [row]
         });
     }
 }
@@ -821,7 +881,7 @@ async function handleSincronizarPlantillaCommand(interaction) {
     const modalidad = interaction.options.getString('modalidad');
     const equipo = interaction.options.getString('equipo');
     const jugadoresRaw = interaction.options.getString('jugadores');
-    const articulos = interaction.options.getInteger('articulos') || 0; // Default to 0 if not provided
+    const articulos = interaction.options.getInteger('articulos');
 
     const modalityKey = modalidad.toLowerCase();
     const teamData = ligaData[modalityKey]?.teams[equipo];
@@ -830,26 +890,40 @@ async function handleSincronizarPlantillaCommand(interaction) {
         return await interaction.reply({ content: `❌ No se encontró el equipo **${equipo}** en la modalidad **${modalidad}**.`, ephemeral: true });
     }
 
-    // Parse players from the raw string (e.g., "@player1 @player2")
-    const playerMentions = jugadoresRaw.match(/<@!?(\d+)>/g);
-    if (!playerMentions || playerMentions.length === 0) {
-        return await interaction.reply({ content: '❌ No se encontraron jugadores válidos en la lista proporcionada.', ephemeral: true });
+    if (jugadoresRaw) {
+        console.log('jugadoresRaw:', jugadoresRaw);
+        const playerMentions = jugadoresRaw.match(/<@!?(\d+)>/g);
+        if (!playerMentions || playerMentions.length === 0) {
+            return await interaction.reply({ content: '❌ No se encontraron jugadores válidos en la lista proporcionada.', ephemeral: true });
+        }
+
+        const newPlayers = playerMentions.map(mention => {
+            const id = mention.replace(/<@!?/, '').replace(/>/, '');
+            const member = interaction.guild.members.cache.get(id);
+            const name = member ? member.user.username : `Unknown User (${id})`;
+            return { id, name, rol: null };
+        });
+
+        teamData.jugadores_habilitados = newPlayers;
+        if (articulos !== null) {
+            teamData.articulos_usados = articulos;
+        }
+        await saveData();
+        await updateTeamMessage(interaction.guild, modalityKey, equipo);
+
+        await interaction.reply({ content: `✅ Plantilla de **${equipo}** sincronizada con éxito. Jugadores: ${teamData.jugadores_habilitados.length}. Artículos usados: ${teamData.articulos_usados}.`, ephemeral: true });
+    } else {
+        const currentPlayers = teamData.jugadores_habilitados;
+        if (currentPlayers.length === 0) {
+            return await interaction.reply({ content: `La plantilla de **${equipo}** está vacía.`, ephemeral: true });
+        }
+
+        const playerMentions = currentPlayers.map(p => `<@${p.id}>`).join(' ');
+        const message = `Para editar la plantilla de **${equipo}**, copia el siguiente comando, pega los jugadores y edita la lista. Luego, ejecuta el comando.\n\n` +
+                        `/sincronizar_plantilla modalidad:${modalidad} equipo:${equipo} jugadores:${playerMentions}`;
+
+        await interaction.reply({ content: message, ephemeral: true });
     }
-
-    const newPlayers = playerMentions.map(mention => {
-        const id = mention.replace(/<@!?/, '').replace(/>/, '');
-        // Attempt to get username from guild members cache or fetch
-        const member = interaction.guild.members.cache.get(id);
-        const name = member ? member.user.username : `Unknown User (${id})`;
-        return { id, name, rol: null }; // Default role to null
-    });
-
-    teamData.jugadores_habilitados = newPlayers;
-    teamData.articulos_usados = articulos; // Set articles used directly
-    await saveData();
-    await updateTeamMessage(interaction.guild, modalityKey, equipo);
-
-    await interaction.reply({ content: `✅ Plantilla de **${equipo}** sincronizada con éxito. Jugadores: ${teamData.jugadores_habilitados.length}. Artículos usados: ${teamData.articulos_usados}.`, ephemeral: true });
 }
 
 async function handleOtorgarArticulosCommand(interaction) {
@@ -1173,7 +1247,13 @@ async function handleAdminConfirmation(interaction) {
     }
     
     teamData.jugadores_habilitados.push({ id: targetUser.id, name: targetUser.username, rol: signingData.rol, fichaje: signing_type });
-    saveData(); // Save ligaData
+    try {
+        saveData(); // Save ligaData
+    } catch (saveError) {
+        console.error('❌ Error al guardar ligaData después del fichaje:', saveError);
+        await interaction.followUp({ content: '❌ Error interno: No se pudo guardar la actualización de la planilla. Por favor, contacta a un administrador.', ephemeral: true });
+        return;
+    }
 
     if (marketStateUpdated) {
         fs.writeFileSync('./market_state.json', JSON.stringify(marketState, null, 2)); // Save updated marketState
@@ -1229,10 +1309,15 @@ async function handleActualizarTodasPlanillasCommand(interaction) {
 }
 
 async function handleEstablecerPlantillaCommand(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    console.log('DEBUG: handleEstablecerPlantillaCommand - Inicio');
+
     if (!isAuthorized(interaction)) {
-        return await interaction.reply({ content: '❌ No tienes permisos.', ephemeral: true });
+        console.log('DEBUG: handleEstablecerPlantillaCommand - No autorizado');
+        return await interaction.editReply({ content: '❌ No tienes permisos.', ephemeral: true });
     }
 
+    console.log('DEBUG: handleEstablecerPlantillaCommand - Autorizado');
     const { equipo, modalidad } = extractTeamAndModality(interaction);
     const modalityKey = modalidad.toLowerCase();
     const teamName = equipo;
@@ -1242,30 +1327,30 @@ async function handleEstablecerPlantillaCommand(interaction) {
     const teamData = foundTeamName ? teams[foundTeamName] : undefined;
 
     if (!teamData) {
-        return await interaction.reply({ content: `❌ No se encontró el equipo "${teamName}".`, ephemeral: true });
+        console.log('DEBUG: handleEstablecerPlantillaCommand - Equipo no encontrado');
+        return await interaction.editReply({ content: `❌ No se encontró el equipo "${teamName}".`, ephemeral: true });
     }
 
+    console.log('DEBUG: handleEstablecerPlantillaCommand - Equipo encontrado, construyendo mensaje...');
     const messageContent = await buildTeamPlainText(interaction.guild, modalityKey, foundTeamName);
+    console.log('DEBUG: handleEstablecerPlantillaCommand - Mensaje construido, enviando al canal...');
     const message = await interaction.channel.send({ content: messageContent });
+    console.log('DEBUG: handleEstablecerPlantillaCommand - Mensaje enviado al canal, guardando datos...');
 
     teamData.channel_id = message.channel.id;
     teamData.message_id = message.id;
     saveData();
+    console.log('DEBUG: handleEstablecerPlantillaCommand - Datos guardados, enviando respuesta final...');
 
-    await interaction.reply({ content: `✅ Mensaje de plantilla establecido para ${foundTeamName}.`, ephemeral: true });
+    await interaction.editReply({ content: `✅ Mensaje de plantilla establecido para ${foundTeamName}.`, ephemeral: true });
+    console.log('DEBUG: handleEstablecerPlantillaCommand - Fin');
 }
 
 async function buildTeamPlainText(guild, modalityKey, teamName) {
     const leagueData = ligaData[modalityKey];
     const teamData = leagueData.teams[teamName];
 
-    if (teamData.jugadores_habilitados.length > 0) {
-        try {
-            await guild.members.fetch({ user: teamData.jugadores_habilitados.map(p => p.id) });
-        } catch (err) {
-            console.error("Error fetching members for plain text message:", err);
-        }
-    }
+    // Removed guild.members.fetch to prevent potential timeouts. player.name is used as fallback.
 
     // Sort players by role
     const roleOrder = { 'C': 1, 'SC': 2 };
@@ -1302,13 +1387,7 @@ async function buildTeamEmbed(guild, modalityKey, teamName) {
     const leagueData = ligaData[modalityKey];
     const teamData = leagueData.teams[teamName];
 
-    if (teamData.jugadores_habilitados.length > 0) {
-        try {
-            await guild.members.fetch({ user: teamData.jugadores_habilitados.map(p => p.id) });
-        } catch (err) {
-            console.error("Error fetching members for embed:", err);
-        }
-    }
+    // Removed guild.members.fetch to prevent potential timeouts. player.name is used as fallback.
 
     // Sort players by role
     const roleOrder = { 'C': 1, 'SC': 2 };

@@ -1,33 +1,18 @@
 {
   "modalities": {
-    "bigger x4": {
-      "season_state": "PRETEMPORADA",
-      "mid_season_free_signings_used": 0,
-      "season_start_date": "2025-10-12"
-    },
-    "bigger x7": {
-      "season_state": "TEMPORADA_REGULAR_MERCADO_CERRADO",
-      "mid_season_free_signings_used": 0,
-      "season_start_date": "2025-10-12"
-    },
-    "bigger x3": {
-      "season_state": "TEMPORADA_REGULAR_MERCADO_CERRADO",
-      "mid_season_free_signings_used": 0,
-      "season_start_date": "2025-10-12"
-    },
-    "bigger_x3": {
-      "season_state": "TEMPORADA_REGULAR_MERCADO_CERRADO",
-      "mid_season_free_signings_used": 0,
-      "season_start_date": "2025-10-12"
-    },
     "bigger_x4": {
-      "season_state": "PRETEMPORADA",
+      "season_state": "TEMPORADA_REGULAR_MERCADO_CERRADO",
       "mid_season_free_signings_used": 0,
       "season_start_date": "2025-10-12"
     },
     "bigger_x7": {
       "season_state": "TEMPORADA_REGULAR_MERCADO_CERRADO",
       "mid_season_free_signings_used": 0,
+      "season_start_date": "2025-10-12"
+    },
+    "bigger_x3": {
+      "season_state": "TEMPORADA_REGULAR_MERCADO_ABIERTO",
+      "mid_season_free_signings_used": 1,
       "season_start_date": "2025-10-12"
     }
   }

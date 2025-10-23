@@ -18,6 +18,7 @@ async function saveData() {
         console.log('💾 Datos de plantilla guardados en liga_data.json');
     } catch (error) {
         console.error("❌ Error al guardar datos en liga_data.json:", error);
+        throw error; // Re-throw the error so bot.js can catch it
     }
 }
 
